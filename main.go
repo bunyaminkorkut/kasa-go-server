@@ -13,10 +13,10 @@ func main() {
 		fmt.Fprintln(w, "Merhaba, Go server çalışıyor!")
 	})
 
-	http.HandleFunc("/deneme", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/v", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "Merhaba, test serverı çalışıyor!")
 	})
 
 	fmt.Println("Sunucu 8080 portunda başlatıldı...")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(":80", nil))
 }
