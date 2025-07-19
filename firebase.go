@@ -65,3 +65,26 @@ func CreateFirebaseUser(email, password string) (string, error) {
 
 	return userRecord.UID, nil
 }
+
+func DeleteFirebaseUser(uid string) error {
+	ctx := context.Background()
+
+	credsFile := os.Getenv("FIREBASE_CREDENTIALS")
+	if credsFile == "" {
+		return fmt.Errorf("❌ FIREBASE_CREDENTIALS .env içinde tanımlı değil")
+	}
+
+	opt := option.WithCredentialsFile(credsFile)
+
+	app, err := firebase.NewApp(ctx, nil, opt)
+	if err != nil {
+		return fmt.Errorf("❌ Firebase başlatılamadı: %w", err)
+	}
+
+	authClient, err := app.Auth(ctx)
+	if err != nil {
+		return fmt.Errorf("❌ Firebase Auth başlatılamadı: %w", err)
+	}
+
+	return authClient.DeleteUser(ctx, uid)
+}

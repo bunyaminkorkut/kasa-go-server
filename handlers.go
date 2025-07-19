@@ -50,6 +50,13 @@ func RegisterUserHandler(repo *UserRepository) http.HandlerFunc {
 		err = repo.CreateUser(firebaseUID, req.FullName, req.Email, hashedPwd, req.Iban)
 		if err != nil {
 			log.Println("DB hatası:", err)
+
+			// Firebase'den kullanıcıyı sil
+			delErr := DeleteFirebaseUser(firebaseUID)
+			if delErr != nil {
+				log.Printf("❗ Firebase kullanıcı silinemedi: %v", delErr)
+			}
+
 			http.Error(w, "Kullanıcı oluşturulamadı", http.StatusInternalServerError)
 			return
 		}
