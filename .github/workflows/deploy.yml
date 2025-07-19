@@ -8,7 +8,7 @@ on:
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout source code
         uses: actions/checkout@v3
@@ -27,17 +27,15 @@ jobs:
           echo "DB_PASS=${{ secrets.DB_PASS }}" >> .env
           echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env
           echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
+          echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
+          echo "FIREBASE_CREDENTIALS_PATH=/home/ubuntu/kasa-go-server/firebase_credentials.json" >> .env
+
+      - name: Create Firebase credentials JSON
+        run: |
+          echo '${{ secrets.FIREBASE_CREDENTIALS }}' > firebase_credentials.json
 
       - name: List files after build and .env creation
         run: ls -la
-
-      - name: Print .env content (masked)
-        run: |
-          echo "=== .env file content ==="
-          echo "DB_USER=***"
-          echo "DB_PASS=***"
-          echo "DB_HOST=***"
-          echo "DB_PORT=***"
 
       - name: Ensure target folder exists
         uses: appleboy/ssh-action@master
@@ -80,6 +78,16 @@ jobs:
           target: "/home/ubuntu/kasa-go-server/"
           overwrite: true
 
+      - name: Upload Firebase credentials
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ubuntu
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          source: "firebase_credentials.json"
+          target: "/home/ubuntu/kasa-go-server/"
+          overwrite: true
+
       - name: Verify uploaded files
         uses: appleboy/ssh-action@master
         with:
@@ -89,12 +97,13 @@ jobs:
           script: |
             echo "=== Checking uploaded files ==="
             ls -la /home/ubuntu/kasa-go-server/
-            echo "=== Checking .env file ==="
-            if [ -f /home/ubuntu/kasa-go-server/.env ]; then
-              echo ".env file exists"
-              wc -l /home/ubuntu/kasa-go-server/.env
+            echo "=== Checking .env ==="
+            cat /home/ubuntu/kasa-go-server/.env
+            echo "=== Checking Firebase Credentials ==="
+            if [ -f /home/ubuntu/kasa-go-server/firebase_credentials.json ]; then
+              echo "✅ Firebase credentials uploaded"
             else
-              echo ".env file NOT found!"
+              echo "❌ Firebase credentials NOT found"
             fi
 
       - name: Grant app permission to bind port 80

@@ -56,7 +56,9 @@ func main() {
 		}
 	}
 	fmt.Println("✅ SQL script başarıyla çalıştırıldı.")
-
+	connectToFirebase()
+	// Sunucu başlatma
+	
 	// HTTP endpointleri
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "Aşkımmm")
