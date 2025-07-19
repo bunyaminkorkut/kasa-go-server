@@ -58,7 +58,8 @@ func main() {
 	fmt.Println("✅ SQL script başarıyla çalıştırıldı.")
 	connectToFirebase()
 	// Sunucu başlatma
-	
+	repo := &UserRepository{DB: db}
+
 	// HTTP endpointleri
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "Aşkımmm")
@@ -67,6 +68,7 @@ func main() {
 	http.HandleFunc("/v", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "Merhaba, test serverı çalışıyor!")
 	})
+	http.HandleFunc("/register", RegisterUserHandler(repo))
 
 	fmt.Println("🚀 Sunucu 80 portunda başlatıldı...")
 	log.Fatal(http.ListenAndServe(":80", nil))
