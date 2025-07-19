@@ -21,7 +21,7 @@ jobs:
       - name: Build
         run: go build -o app
 
-      - name: Copy binary to Lightsail
+      - name: Copy to Lightsail
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
@@ -29,7 +29,16 @@ jobs:
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           source: "app"
           target: "/home/ubuntu/kasa-go-server"
-
+      
+      - name: Give app permission to bind port 80
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ubuntu
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            sudo setcap 'cap_net_bind_service=+ep' /home/ubuntu/kasa-go-server/app
+      
       - name: Restart app on Lightsail
         uses: appleboy/ssh-action@master
         with:
