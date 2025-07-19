@@ -1,0 +1,41 @@
+name: Build and Deploy Go Server to Lightsail
+
+on:
+  push:
+    branches:
+      - main  # Ana branch adını kendine göre değiştir
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build
+        run: go build -o app
+
+      - name: Copy binary to Lightsail
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ubuntu
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          source: "app"
+          target: "/home/ubuntu/kasa-go-server"
+
+      - name: Restart app on Lightsail
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ubuntu
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            pkill app || true
+            nohup /home/ubuntu/kasa-go-server/app > /home/ubuntu/kasa-go-server/app.log 2>&1 &
