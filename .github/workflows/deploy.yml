@@ -8,7 +8,7 @@ on:
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
-
+    
     steps:
       - name: Checkout source code
         uses: actions/checkout@v3
@@ -31,8 +31,13 @@ jobs:
       - name: List files after build and .env creation
         run: ls -la
 
-      - name: Print .env content
-        run: cat .env
+      - name: Print .env content (masked)
+        run: |
+          echo "=== .env file content ==="
+          echo "DB_USER=***"
+          echo "DB_PASS=***"
+          echo "DB_HOST=***"
+          echo "DB_PORT=***"
 
       - name: Ensure target folder exists
         uses: appleboy/ssh-action@master
@@ -42,15 +47,44 @@ jobs:
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           script: |
             mkdir -p /home/ubuntu/kasa-go-server
+            echo "Target directory created/verified"
 
-      - name: Upload app and .env to Lightsail via SCP
+      - name: Upload app binary
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ubuntu
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          source: "app,.env"
-          target: /home/ubuntu/kasa-go-server
+          source: "app"
+          target: "/home/ubuntu/kasa-go-server/"
+          overwrite: true
+
+      - name: Upload .env file
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ubuntu
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          source: ".env"
+          target: "/home/ubuntu/kasa-go-server/"
+          overwrite: true
+
+      - name: Verify uploaded files
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ubuntu
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            echo "=== Checking uploaded files ==="
+            ls -la /home/ubuntu/kasa-go-server/
+            echo "=== Checking .env file ==="
+            if [ -f /home/ubuntu/kasa-go-server/.env ]; then
+              echo ".env file exists"
+              wc -l /home/ubuntu/kasa-go-server/.env
+            else
+              echo ".env file NOT found!"
+            fi
 
       - name: Grant app permission to bind port 80
         uses: appleboy/ssh-action@master
@@ -60,13 +94,48 @@ jobs:
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           script: |
             sudo setcap 'cap_net_bind_service=+ep' /home/ubuntu/kasa-go-server/app
+            echo "Port binding capability granted"
 
-      - name: Restart app on Lightsail
+      - name: Stop existing app process
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ubuntu
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           script: |
-            pkill app || true
-            nohup /home/ubuntu/kasa-go-server/app > /home/ubuntu/kasa-go-server/app.log 2>&1 &
+            echo "Stopping existing app process..."
+            pkill app || echo "No existing app process found"
+            sleep 2
+
+      - name: Start app on Lightsail
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ubuntu
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/kasa-go-server
+            echo "Starting app from directory: $(pwd)"
+            nohup ./app > app.log 2>&1 &
+            sleep 3
+            echo "App started with PID: $(pgrep app || echo 'Not found')"
+
+      - name: Check app status
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ubuntu
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            echo "=== App Status ==="
+            if pgrep app > /dev/null; then
+              echo "✅ App is running (PID: $(pgrep app))"
+            else
+              echo "❌ App is not running"
+            fi
+            echo "=== Recent logs ==="
+            if [ -f /home/ubuntu/kasa-go-server/app.log ]; then
+              tail -10 /home/ubuntu/kasa-go-server/app.log
+            else
+              echo "No log file found"
+            fi
