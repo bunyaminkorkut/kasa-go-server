@@ -48,6 +48,7 @@ jobs:
             .env
           target: /home/ubuntu/kasa-go-server
 
+
       - name: Grant app permission to bind port 80
         uses: appleboy/ssh-action@master
         with:
