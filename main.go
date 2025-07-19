@@ -35,7 +35,7 @@ func main() {
 	defer db.Close()
 
 	// SQL scriptini oku
-	sqlBytes, err := ioutil.ReadFile("schema.sql")
+	sqlBytes, err := ioutil.ReadFile("./database/schema.sql")
 	if err != nil {
 		log.Fatal(err)
 	}
