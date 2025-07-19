@@ -32,7 +32,8 @@ jobs:
 
       - name: Create Firebase credentials JSON
         run: |
-          echo '${{ secrets.FIREBASE_CREDENTIALS }}' > firebase_credentials.json
+          echo "${{ secrets.FIREBASE_CREDENTIALS_B64 }}" | base64 --decode > /home/ubuntu/kasa-go-server/firebase_credentials.json
+
 
       - name: List files after build and .env creation
         run: ls -la
