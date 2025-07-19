@@ -49,7 +49,7 @@ jobs:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ubuntu
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          source: "app .env"
+          source: "app,.env"
           target: /home/ubuntu/kasa-go-server
 
       - name: Grant app permission to bind port 80
