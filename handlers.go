@@ -47,7 +47,7 @@ func RegisterUserHandler(repo *UserRepository) http.HandlerFunc {
 		}
 
 		// 3. Kendi veritabanına kaydet (firebaseUID ile birlikte kaydedebilirsin)
-		err = repo.CreateUser(firebaseUID, req.FullName, req.Email, hashedPwd)
+		err = repo.CreateUser(firebaseUID, req.FullName, req.Email, hashedPwd, req.Iban)
 		if err != nil {
 			log.Println("DB hatası:", err)
 			http.Error(w, "Kullanıcı oluşturulamadı", http.StatusInternalServerError)
