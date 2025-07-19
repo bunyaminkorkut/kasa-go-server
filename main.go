@@ -14,7 +14,7 @@ func main() {
 	})
 
 	http.HandleFunc("/deneme", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "Merhaba, deneme serverı çalışıyor!")
+		fmt.Fprintln(w, "Merhaba, test serverı çalışıyor!")
 	})
 
 	fmt.Println("Sunucu 8080 portunda başlatıldı...")
