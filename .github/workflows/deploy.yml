@@ -21,6 +21,13 @@ jobs:
       - name: Build Go app
         run: go build -o app
 
+      - name: Create .env file
+        run: |
+          echo "DB_USER=${{ secrets.DB_USER }}" > .env
+          echo "DB_PASS=${{ secrets.DB_PASS }}" >> .env
+          echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env
+          echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
+
       - name: Ensure target folder exists
         uses: appleboy/ssh-action@master
         with:
@@ -30,14 +37,16 @@ jobs:
           script: |
             mkdir -p /home/ubuntu/kasa-go-server
 
-      - name: Upload app to Lightsail via SCP
+      - name: Upload app and .env to Lightsail via SCP
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ubuntu
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          source: "app"
-          target: "/home/ubuntu/kasa-go-server"
+          source: |
+            app
+            .env
+          target: /home/ubuntu/kasa-go-server
 
       - name: Grant app permission to bind port 80
         uses: appleboy/ssh-action@master
