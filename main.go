@@ -59,7 +59,7 @@ func main() {
 
 	// HTTP endpointleri
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "Merhaba, Go server çalışıyor!")
+		fmt.Fprintln(w, "Aşkımmm")
 	})
 
 	http.HandleFunc("/v", func(w http.ResponseWriter, r *http.Request) {
