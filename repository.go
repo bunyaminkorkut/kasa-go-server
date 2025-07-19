@@ -9,6 +9,6 @@ type UserRepository struct {
 }
 
 func (repo *UserRepository) CreateUser(id, username, email, hashedPassword string) error {
-	_, err := repo.DB.Exec("INSERT INTO users (id, username, email, password) VALUES (?, ?, ?, ?)", id, username, email, hashedPassword)
+	_, err := repo.DB.Exec("INSERT INTO users (id, username, email, password_hash) VALUES (?, ?, ?, ?)", id, username, email, hashedPassword)
 	return err
 }
