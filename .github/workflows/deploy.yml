@@ -32,13 +32,12 @@ jobs:
 
       - name: Create Firebase credentials JSON
         run: |
-          echo "${{ secrets.FIREBASE_CREDENTIALS_B64 }}" | base64 --decode > /home/ubuntu/kasa-go-server/firebase_credentials.json
-
+          echo "${{ secrets.FIREBASE_CREDENTIALS_B64 }}" | base64 --decode > firebase_credentials.json
 
       - name: List files after build and .env creation
         run: ls -la
 
-      - name: Ensure target folder exists
+      - name: Ensure target folder exists on server
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
@@ -89,7 +88,7 @@ jobs:
           target: "/home/ubuntu/kasa-go-server/"
           overwrite: true
 
-      - name: Verify uploaded files
+      - name: Verify uploaded files on server
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
