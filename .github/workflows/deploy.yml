@@ -28,6 +28,12 @@ jobs:
           echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env
           echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
 
+      - name: List files after build and .env creation
+        run: ls -la
+
+      - name: Print .env content
+        run: cat .env
+
       - name: Ensure target folder exists
         uses: appleboy/ssh-action@master
         with:
@@ -47,7 +53,6 @@ jobs:
             app
             .env
           target: /home/ubuntu/kasa-go-server
-
 
       - name: Grant app permission to bind port 80
         uses: appleboy/ssh-action@master
