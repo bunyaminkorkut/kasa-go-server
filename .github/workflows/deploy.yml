@@ -3,7 +3,7 @@ name: Build and Deploy Go Server to Lightsail
 on:
   push:
     branches:
-      - main  # Ana branch adını kendine göre değiştir
+      - main
 
 jobs:
   build-deploy:
@@ -18,10 +18,19 @@ jobs:
         with:
           go-version: '1.22'
 
-      - name: Build
+      - name: Build Go app
         run: go build -o app
 
-      - name: Copy to Lightsail
+      - name: Ensure target folder exists
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ubuntu
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            mkdir -p /home/ubuntu/kasa-go-server
+
+      - name: Upload app to Lightsail via SCP
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
@@ -29,8 +38,8 @@ jobs:
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           source: "app"
           target: "/home/ubuntu/kasa-go-server"
-      
-      - name: Give app permission to bind port 80
+
+      - name: Grant app permission to bind port 80
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
@@ -38,7 +47,7 @@ jobs:
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           script: |
             sudo setcap 'cap_net_bind_service=+ep' /home/ubuntu/kasa-go-server/app
-      
+
       - name: Restart app on Lightsail
         uses: appleboy/ssh-action@master
         with:
