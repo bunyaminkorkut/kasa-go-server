@@ -49,6 +49,17 @@ jobs:
             mkdir -p /home/ubuntu/kasa-go-server
             echo "Target directory created/verified"
 
+      - name: Stop existing app process before upload
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ubuntu
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            echo "Stopping existing app process..."
+            pkill app || echo "No existing app process found"
+            sleep 2
+
       - name: Upload app binary
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -96,17 +107,6 @@ jobs:
             sudo setcap 'cap_net_bind_service=+ep' /home/ubuntu/kasa-go-server/app
             echo "Port binding capability granted"
 
-      - name: Stop existing app process
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.LIGHTSAIL_HOST }}
-          username: ubuntu
-          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          script: |
-            echo "Stopping existing app process..."
-            pkill app || echo "No existing app process found"
-            sleep 2
-
       - name: Start app on Lightsail
         uses: appleboy/ssh-action@master
         with:
@@ -120,7 +120,7 @@ jobs:
             sleep 3
             echo "App started with PID: $(pgrep app || echo 'Not found')"
 
-      - name: Check app status
+      - name: Check app status and recent logs
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
