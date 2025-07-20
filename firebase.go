@@ -14,6 +14,11 @@ import (
 	"google.golang.org/api/option"
 )
 
+// FirebaseConfig yapısı FIREBASE_CONFIG JSON'undaki veriyi temsil eder
+type FirebaseConfig struct {
+	APIKey string `json:"apiKey"`
+}
+
 func connectToFirebase() {
 	ctx := context.Background()
 
@@ -36,6 +41,7 @@ func connectToFirebase() {
 
 	fmt.Println("✅ Firebase'e başarıyla bağlanıldı")
 }
+
 func CreateFirebaseUser(email, password string) (string, error) {
 	ctx := context.Background()
 
@@ -46,7 +52,6 @@ func CreateFirebaseUser(email, password string) (string, error) {
 
 	opt := option.WithCredentialsFile(credsFile)
 
-	// Firebase app yalnızca bir kere oluşturulmalı (singleton pattern önerilir)
 	app, err := firebase.NewApp(ctx, nil, opt)
 	if err != nil {
 		return "", fmt.Errorf("❌ Firebase başlatılamadı: %w", err)
@@ -93,17 +98,20 @@ func DeleteFirebaseUser(uid string) error {
 }
 
 func AuthenticateFirebaseUser(email, password string) (FirebaseAuthResult, error) {
-	// FIREBASE_CONFIG içinden apiKey'i al
-	configJSON := os.Getenv("FIREBASE_CONFIG")
-	if configJSON == "" {
-		return FirebaseAuthResult{}, fmt.Errorf("❌ FIREBASE_CONFIG tanımlı değil")
+	configPath := os.Getenv("FIREBASE_CONFIG")
+	if configPath == "" {
+		return FirebaseAuthResult{}, fmt.Errorf("❌ FIREBASE_CONFIG_PATH tanımlı değil")
 	}
 
-	var config struct {
-		APIKey string `json:"apiKey"`
+	// Dosyadan config'i oku
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return FirebaseAuthResult{}, fmt.Errorf("❌ FIREBASE_CONFIG_PATH dosyası okunamadı: %w", err)
 	}
-	if err := json.Unmarshal([]byte(configJSON), &config); err != nil {
-		return FirebaseAuthResult{}, fmt.Errorf("❌ FIREBASE_CONFIG çözümlenemedi: %w", err)
+
+	var config FirebaseConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return FirebaseAuthResult{}, fmt.Errorf("❌ FIREBASE_CONFIG JSON parse edilemedi: %w", err)
 	}
 
 	if config.APIKey == "" {

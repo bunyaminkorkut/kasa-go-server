@@ -29,11 +29,15 @@ jobs:
           echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
           echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
           echo "FIREBASE_CREDENTIALS=/home/ubuntu/kasa-go-server/firebase_credentials.json" >> .env
-          echo "FIREBASE_CONFIG='${{ secrets.FIREBASE_CONFIG }}'" >> .env
+          echo "FIREBASE_CONFIG=/home/ubuntu/kasa-go-server/firebase_config.json" >> .env
 
       - name: Create Firebase credentials JSON
         run: |
           echo "${{ secrets.FIREBASE_CREDENTIALS_B64 }}" | base64 --decode > firebase_credentials.json
+
+      - name: Create Firebase config JSON
+        run: |
+          echo "${{ secrets.FIREBASE_CONFIG }}" | base64 --decode > firebase_config.json
 
       - name: List files after build and .env creation
         run: ls -la
@@ -89,6 +93,16 @@ jobs:
           target: "/home/ubuntu/kasa-go-server/"
           overwrite: true
 
+      - name: Upload Firebase config
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ubuntu
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          source: "firebase_config.json"
+          target: "/home/ubuntu/kasa-go-server/"
+          overwrite: true
+
       - name: Verify uploaded files on server
         uses: appleboy/ssh-action@master
         with:
@@ -105,6 +119,12 @@ jobs:
               echo "✅ Firebase credentials uploaded"
             else
               echo "❌ Firebase credentials NOT found"
+            fi
+            echo "=== Checking Firebase Config ==="
+            if [ -f /home/ubuntu/kasa-go-server/firebase_config.json ]; then
+              echo "✅ Firebase config uploaded"
+            else
+              echo "❌ Firebase config NOT found"
             fi
 
       - name: Grant app permission to bind port 80

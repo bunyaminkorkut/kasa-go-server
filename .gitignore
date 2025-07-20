@@ -114,4 +114,5 @@ fabric.properties
 # https://plugins.jetbrains.com/plugin/8053-azure-toolkit-for-intellij
 .idea/**/azureSettings.xml
 .firebase-service-account.json
+firebase-config.json
 # End of https://www.toptal.com/developers/gitignore/api/goland
