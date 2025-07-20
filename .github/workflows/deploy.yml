@@ -28,9 +28,9 @@ jobs:
           echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env
           echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
           echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
-          echo "FIREBASE_CONFIG='${{ secrets.FIREBASE_CONFIG }}'" >> .env
           echo "FIREBASE_CREDENTIALS=/home/ubuntu/kasa-go-server/firebase_credentials.json" >> .env
-          
+          echo "FIREBASE_CONFIG='${{ secrets.FIREBASE_CONFIG }}'" >> .env
+
       - name: Create Firebase credentials JSON
         run: |
           echo "${{ secrets.FIREBASE_CREDENTIALS_B64 }}" | base64 --decode > firebase_credentials.json
