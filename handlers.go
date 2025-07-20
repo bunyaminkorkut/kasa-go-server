@@ -95,28 +95,26 @@ func LoginUserHandler(repo *UserRepository) http.HandlerFunc {
 			return
 		}
 
+		// JWT token oluştur
+		jwtToken, err := generateJWT(map[string]string{
+			"uid":       authResult.UID,
+			"email":     authResult.Email,
+			"token":     authResult.IDToken,
+			"expiresIn": authResult.ExpiresIn,
+		})
+		if err != nil {
+			log.Println("JWT oluşturma hatası:", err)
+			http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
+			return
+		}
+
 		// Başarılı giriş yanıtı
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"message":   "Giriş başarılı",
-			"token":     authResult.IDToken,
-			"expiresIn": authResult.ExpiresIn + "s", // saniye bilgisi
-			"user": map[string]string{
-				"uid":   authResult.UID,
-				"email": authResult.Email,
-			},
+			"jwtToken":  jwtToken,
+			"expiresIn": authResult.ExpiresIn + "s",
 		})
 	}
 }
-
-// AuthenticateFirebaseUser authenticates a user with Firebase using email and password.
-type FirebaseAuthResult struct {
-	IDToken   string
-	ExpiresIn string
-	UID       string
-	Email     string
-}
-
-// Update the AuthenticateFirebaseUser function signature in your codebase to:
-// func AuthenticateFirebaseUser(email, password string) (FirebaseAuthResult, error)

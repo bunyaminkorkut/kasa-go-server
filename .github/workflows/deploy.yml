@@ -28,6 +28,7 @@ jobs:
           echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env
           echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
           echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
+          echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> .env
           echo "FIREBASE_CREDENTIALS=/home/ubuntu/kasa-go-server/firebase_credentials.json" >> .env
           echo "FIREBASE_CONFIG=/home/ubuntu/kasa-go-server/firebase_config.json" >> .env
 

@@ -146,6 +146,7 @@ func AuthenticateFirebaseUser(email, password string) (FirebaseAuthResult, error
 	if result.IDToken == "" {
 		return FirebaseAuthResult{}, fmt.Errorf("❌ Giriş başarısız, ID token alınamadı")
 	}
+	log.Println("Firebase kimlik doğrulama başarılı:", result)
 
 	return FirebaseAuthResult{
 		IDToken:   result.IDToken,
@@ -153,4 +154,11 @@ func AuthenticateFirebaseUser(email, password string) (FirebaseAuthResult, error
 		UID:       result.LocalID,
 		Email:     result.Email,
 	}, nil
+}
+
+type FirebaseAuthResult struct {
+	IDToken   string
+	ExpiresIn string
+	UID       string
+	Email     string
 }
