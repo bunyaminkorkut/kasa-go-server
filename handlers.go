@@ -46,7 +46,7 @@ func RegisterUserHandler(repo *UserRepository) http.HandlerFunc {
 			return
 		}
 
-		// 3. Kendi veritabanına kaydet (firebaseUID ile birlikte kaydedebilirsin)
+		// 3. Veritabanına kaydet
 		err = repo.CreateUser(firebaseUID, req.FullName, req.Email, hashedPwd, req.Iban)
 		if err != nil {
 			log.Println("DB hatası:", err)
@@ -61,8 +61,35 @@ func RegisterUserHandler(repo *UserRepository) http.HandlerFunc {
 			return
 		}
 
+		// 4. Firebase Auth token al
+		authResult, err := AuthenticateFirebaseUser(req.Email, req.Password)
+		if err != nil {
+			log.Println("Firebase kimlik doğrulama hatası:", err)
+			http.Error(w, "Kimlik doğrulama başarısız", http.StatusUnauthorized)
+			return
+		}
+
+		// 5. JWT oluştur
+		jwtToken, err := generateJWT(map[string]string{
+			"uid":       authResult.UID,
+			"email":     authResult.Email,
+			"token":     authResult.IDToken,
+			"expiresIn": authResult.ExpiresIn,
+		})
+		if err != nil {
+			log.Println("JWT oluşturma hatası:", err)
+			http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
+			return
+		}
+
+		// ✅ Başarılı yanıt
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"message": "Kullanıcı başarıyla oluşturuldu"})
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"message":   "Kullanıcı başarıyla oluşturuldu",
+			"jwtToken":  jwtToken,
+			"expiresIn": authResult.ExpiresIn + "s",
+		})
 	}
 }
 
