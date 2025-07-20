@@ -115,4 +115,5 @@ fabric.properties
 .idea/**/azureSettings.xml
 .firebase-service-account.json
 firebase-config.json
+firebase-key.json
 # End of https://www.toptal.com/developers/gitignore/api/goland
