@@ -70,6 +70,8 @@ func main() {
 	})
 	http.HandleFunc("/register", RegisterUserHandler(repo))
 
+	http.HandleFunc("/login", LoginUserHandler(repo))
+
 	fmt.Println("🚀 Sunucu 80 portunda başlatıldı...")
 	log.Fatal(http.ListenAndServe(":80", nil))
 }

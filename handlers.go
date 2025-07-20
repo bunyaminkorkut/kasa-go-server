@@ -65,3 +65,58 @@ func RegisterUserHandler(repo *UserRepository) http.HandlerFunc {
 		json.NewEncoder(w).Encode(map[string]string{"message": "Kullanıcı başarıyla oluşturuldu"})
 	}
 }
+
+func LoginUserHandler(repo *UserRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Yalnızca POST metodu desteklenir", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req UserRegisterRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Geçersiz JSON formatı", http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+
+		req.Email = strings.TrimSpace(req.Email)
+		req.Password = strings.TrimSpace(req.Password)
+
+		if req.Email == "" || req.Password == "" {
+			http.Error(w, "Email ve şifre zorunludur", http.StatusBadRequest)
+			return
+		}
+
+		authResult, err := AuthenticateFirebaseUser(req.Email, req.Password)
+		if err != nil {
+			log.Println("Firebase kimlik doğrulama hatası:", err)
+			http.Error(w, "Geçersiz email veya şifre", http.StatusUnauthorized)
+			return
+		}
+
+		// Başarılı giriş yanıtı
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"message":   "Giriş başarılı",
+			"token":     authResult.IDToken,
+			"expiresIn": authResult.ExpiresIn + "s", // saniye bilgisi
+			"user": map[string]string{
+				"uid":   authResult.UID,
+				"email": authResult.Email,
+			},
+		})
+	}
+}
+
+// AuthenticateFirebaseUser authenticates a user with Firebase using email and password.
+type FirebaseAuthResult struct {
+	IDToken   string
+	ExpiresIn string
+	UID       string
+	Email     string
+}
+
+// Update the AuthenticateFirebaseUser function signature in your codebase to:
+// func AuthenticateFirebaseUser(email, password string) (FirebaseAuthResult, error)

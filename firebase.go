@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 
 	firebase "firebase.google.com/go/v4"
@@ -87,4 +90,59 @@ func DeleteFirebaseUser(uid string) error {
 	}
 
 	return authClient.DeleteUser(ctx, uid)
+}
+
+func AuthenticateFirebaseUser(email, password string) (FirebaseAuthResult, error) {
+	// FIREBASE_CONFIG içinden apiKey'i al
+	configJSON := os.Getenv("FIREBASE_CONFIG")
+	if configJSON == "" {
+		return FirebaseAuthResult{}, fmt.Errorf("❌ FIREBASE_CONFIG tanımlı değil")
+	}
+
+	var config struct {
+		APIKey string `json:"apiKey"`
+	}
+	if err := json.Unmarshal([]byte(configJSON), &config); err != nil {
+		return FirebaseAuthResult{}, fmt.Errorf("❌ FIREBASE_CONFIG çözümlenemedi: %w", err)
+	}
+
+	if config.APIKey == "" {
+		return FirebaseAuthResult{}, fmt.Errorf("❌ apiKey FIREBASE_CONFIG içinde bulunamadı")
+	}
+
+	url := fmt.Sprintf("https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=%s", config.APIKey)
+
+	payload := map[string]interface{}{
+		"email":             email,
+		"password":          password,
+		"returnSecureToken": true,
+	}
+	payloadBytes, _ := json.Marshal(payload)
+
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		return FirebaseAuthResult{}, fmt.Errorf("❌ HTTP isteği başarısız: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		IDToken   string `json:"idToken"`
+		ExpiresIn string `json:"expiresIn"`
+		LocalID   string `json:"localId"`
+		Email     string `json:"email"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return FirebaseAuthResult{}, fmt.Errorf("❌ Yanıt çözümlenemedi: %w", err)
+	}
+
+	if result.IDToken == "" {
+		return FirebaseAuthResult{}, fmt.Errorf("❌ Giriş başarısız, ID token alınamadı")
+	}
+
+	return FirebaseAuthResult{
+		IDToken:   result.IDToken,
+		ExpiresIn: result.ExpiresIn,
+		UID:       result.LocalID,
+		Email:     result.Email,
+	}, nil
 }
