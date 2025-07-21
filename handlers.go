@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func RegisterUserHandler(repo *UserRepository) http.HandlerFunc {
+func RegisterUserHandler(repo *KasaRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Yalnızca POST metodu desteklenir", http.StatusMethodNotAllowed)
@@ -93,7 +93,7 @@ func RegisterUserHandler(repo *UserRepository) http.HandlerFunc {
 	}
 }
 
-func LoginUserHandler(repo *UserRepository) http.HandlerFunc {
+func LoginUserHandler(repo *KasaRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Yalnızca POST metodu desteklenir", http.StatusMethodNotAllowed)
@@ -150,7 +150,7 @@ type CreateGroupRequest struct {
 	GroupName string `json:"group_name"`
 }
 
-func CreateGroupHandler(repo *UserRepository) http.HandlerFunc {
+func CreateGroupHandler(repo *KasaRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Yalnızca POST metodu desteklenir", http.StatusMethodNotAllowed)
@@ -189,5 +189,40 @@ func CreateGroupHandler(repo *UserRepository) http.HandlerFunc {
 			"group_id":   groupID,
 			"group_name": req.GroupName,
 		})
+	}
+}
+
+func GetGroups(repo *KasaRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userUID := r.Context().Value("userUID")
+		if userUID == nil {
+			http.Error(w, "Yetkisiz erişim", http.StatusUnauthorized)
+			return
+		}
+
+		rows, err := repo.GetMyGroups(userUID.(string))
+
+		if err != nil {
+			http.Error(w, "Grup bilgileri alınamadı", http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		var groups []map[string]interface{}
+		for rows.Next() {
+			var groupID int64
+			var groupName string
+			if err := rows.Scan(&groupID, &groupName); err != nil {
+				http.Error(w, "Grup bilgileri okunamadı", http.StatusInternalServerError)
+				return
+			}
+			groups = append(groups, map[string]interface{}{
+				"id":   groupID,
+				"name": groupName,
+			})
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(groups)
 	}
 }

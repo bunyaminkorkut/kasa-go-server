@@ -64,7 +64,7 @@ func main() {
 	FirebaseAuth = firebaseAuth // middleware erişebilsin diye global değişkene ata
 
 	// Sunucu başlatma
-	repo := &UserRepository{DB: db}
+	repo := &KasaRepository{DB: db}
 
 	// HTTP endpointleri
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -79,6 +79,8 @@ func main() {
 	http.HandleFunc("/login", LoginUserHandler(repo))
 
 	http.Handle("/create-group", FirebaseAuthMiddleware(CreateGroupHandler(repo)))
+
+	http.Handle("/groups", FirebaseAuthMiddleware(GetGroups(repo)))
 
 	fmt.Println("🚀 Sunucu 80 portunda başlatıldı...")
 	log.Fatal(http.ListenAndServe(":80", nil))
