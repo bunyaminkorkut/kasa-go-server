@@ -37,7 +37,12 @@ func (repo *KasaRepository) CreateGroup(creatorID, groupName string) (int64, err
 }
 
 func (repo *KasaRepository) GetMyGroups(userID string) (*sql.Rows, error) {
-	rows, err := repo.DB.Query("SELECT g.id, g.group_name FROM groups g JOIN group_members gm ON g.id = gm.group_id WHERE gm.user_id = ?", userID)
+	rows, err := repo.DB.Query(`
+        SELECT g.id, g.group_name, g.created_at 
+        FROM groups g 
+        JOIN group_members gm ON g.id = gm.group_id 
+        WHERE gm.user_id = ?
+    `, userID)
 	if err != nil {
 		log.Println("Grup bilgileri alınamadı:", err)
 		return nil, err
