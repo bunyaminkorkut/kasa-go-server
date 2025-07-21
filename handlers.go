@@ -194,6 +194,11 @@ func CreateGroupHandler(repo *KasaRepository) http.HandlerFunc {
 
 func GetGroups(repo *KasaRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Yalnızca POST metodu desteklenir", http.StatusMethodNotAllowed)
+			return
+		}
+
 		userUID := r.Context().Value("userUID")
 		if userUID == nil {
 			http.Error(w, "Yetkisiz erişim", http.StatusUnauthorized)
