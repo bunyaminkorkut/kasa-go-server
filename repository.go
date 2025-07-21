@@ -36,6 +36,10 @@ func (repo *KasaRepository) CreateGroup(creatorID, groupName string) (int64, err
 	return groupID, nil
 }
 
+func (repo *KasaRepository) GetUserByEmail(email string) (*sql.Rows, error) {
+	return repo.DB.Query("SELECT id FROM users WHERE email = ?", email)
+}
+
 func (repo *KasaRepository) GetMyGroups(userID string) (*sql.Rows, error) {
 	rows, err := repo.DB.Query(`
     SELECT g.id, g.group_name, UNIX_TIMESTAMP(g.created_at) as created_ts
