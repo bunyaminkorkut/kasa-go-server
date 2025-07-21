@@ -217,7 +217,8 @@ func GetGroups(repo *KasaRepository) http.HandlerFunc {
 		for rows.Next() {
 			var groupID int64
 			var groupName string
-			if err := rows.Scan(&groupID, &groupName); err != nil {
+			var createdAt int64
+			if err := rows.Scan(&groupID, &groupName, &createdAt); err != nil {
 				http.Error(w, "Grup bilgileri okunamadı", http.StatusInternalServerError)
 				return
 			}
