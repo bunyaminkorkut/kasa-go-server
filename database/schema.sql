@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS group_members (
 );
 
 CREATE TABLE IF NOT EXISTS group_add_requests (
-    request_id INT AUTOINCREMENT PRIMARY KEY,
+    request_id INT AUTO_INCREMENT PRIMARY KEY,
     group_id INT NOT NULL,
     user_id VARCHAR(100) NOT NULL,
     requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS group_add_requests (
 );
 
 CREATE TABLE IF NOT EXISTS group_expenses (
-    expense_id INT AUTOINCREMENT PRIMARY KEY,
+    expense_id INT AUTO_INCREMENT PRIMARY KEY,
     group_id INT NOT NULL,
     user_id VARCHAR(100) NOT NULL,
     amount DECIMAL(10, 2) NOT NULL,
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS group_expense_splits (
 );
 
 CREATE TABLE IF NOT EXISTS group_expense_payments (
-    payment_id INT AUTOINCREMENT PRIMARY KEY,
+    payment_id INT AUTO_INCREMENT PRIMARY KEY,
     expense_id INT NOT NULL,
     payer_id VARCHAR(100) NOT NULL,
     amount DECIMAL(10, 2) NOT NULL,
