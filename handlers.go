@@ -233,3 +233,163 @@ func GetGroups(repo *KasaRepository) http.HandlerFunc {
 		json.NewEncoder(w).Encode(groups)
 	}
 }
+
+type AddGroupRequest struct {
+	GroupID     string `json:"group_id"`
+	AddedMember string `json:"added_member"`
+}
+
+func SendAddRequest(repo *KasaRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Yalnızca POST metodu desteklenir", http.StatusMethodNotAllowed)
+			return
+		}
+
+		userUID := r.Context().Value("userUID")
+		if userUID == nil {
+			http.Error(w, "Yetkisiz erişim", http.StatusUnauthorized)
+			return
+		}
+
+		var req AddGroupRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Geçersiz JSON", http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+
+		req.GroupID = strings.TrimSpace(req.GroupID)
+		req.AddedMember = strings.TrimSpace(req.AddedMember)
+		if req.AddedMember == "" {
+			http.Error(w, "added_member alanı zorunludur", http.StatusBadRequest)
+			return
+		}
+		if req.GroupID == "" {
+			http.Error(w, "group_id alanı zorunludur", http.StatusBadRequest)
+			return
+		}
+
+		err := repo.sendAddGroupRequest(req.GroupID, req.AddedMember)
+		if err != nil {
+			http.Error(w, "Grup ekleme isteği gönderilemedi", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"message": "Grup ekleme isteği başarıyla gönderildi"})
+	}
+}
+
+func handleGetAddRequests(repo *KasaRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Yalnızca GET metodu desteklenir", http.StatusMethodNotAllowed)
+			return
+		}
+
+		userUID := r.Context().Value("userUID")
+		if userUID == nil {
+			http.Error(w, "Yetkisiz erişim", http.StatusUnauthorized)
+			return
+		}
+
+		rows, err := repo.getMyAddRequests(userUID.(string))
+		if err != nil {
+			http.Error(w, "Grup ekleme istekleri alınamadı", http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		var requests []map[string]interface{}
+		for rows.Next() {
+			var groupID int64
+			var addedMember string
+			var requestedAt int64
+			var request_status string
+			if err := rows.Scan(&groupID, &addedMember, &requestedAt); err != nil {
+				http.Error(w, "Grup ekleme istekleri okunamadı", http.StatusInternalServerError)
+				return
+			}
+			requests = append(requests, map[string]interface{}{
+				"group_id":     groupID,
+				"added_member": addedMember,
+				"requested_at": requestedAt,
+				"status":       request_status, // Varsayılan olarak pending
+			})
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(requests)
+	}
+}
+
+type AcceptAddRequest struct {
+	requestID int64 `json:"request_id"`
+}
+
+func handleAcceptAddRequest(repo *KasaRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Yalnızca POST metodu desteklenir", http.StatusMethodNotAllowed)
+			return
+		}
+
+		userUID := r.Context().Value("userUID")
+		if userUID == nil {
+			http.Error(w, "Yetkisiz erişim", http.StatusUnauthorized)
+			return
+		}
+
+		var req AcceptAddRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Geçersiz JSON", http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+
+		err := repo.acceptAddRequest(req.requestID, userUID.(string))
+		if err != nil {
+			http.Error(w, "Grup ekleme isteği kabul edilemedi", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"message": "Grup ekleme isteği kabul edildi"})
+	}
+}
+
+type RejectAddRequest struct {
+	requestID int64 `json:"request_id"`
+}
+
+func handleRejectAddRequest(repo *KasaRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Yalnızca POST metodu desteklenir", http.StatusMethodNotAllowed)
+			return
+		}
+
+		userUID := r.Context().Value("userUID")
+		if userUID == nil {
+			http.Error(w, "Yetkisiz erişim", http.StatusUnauthorized)
+			return
+		}
+
+		var req AcceptAddRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Geçersiz JSON", http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+
+		err := repo.rejectAddRequest(req.requestID, userUID.(string))
+		if err != nil {
+			http.Error(w, "Grup ekleme isteği kabul edilemedi", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"message": "Grup ekleme isteği kabul edildi"})
+	}
+}

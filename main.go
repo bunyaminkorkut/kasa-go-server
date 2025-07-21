@@ -82,6 +82,14 @@ func main() {
 
 	http.Handle("/groups", AuthMiddleware(GetGroups(repo), repo))
 
+	http.Handle("/send-add-group-request", AuthMiddleware(SendAddRequest(repo), repo))
+
+	http.Handle("/get-my-add-requests", AuthMiddleware(handleGetAddRequests(repo), repo))
+
+	http.Handle("/accept-add-request", AuthMiddleware(handleAcceptAddRequest(repo), repo))
+
+	http.Handle("/reject-add-request", AuthMiddleware(handleRejectAddRequest(repo), repo))
+
 	fmt.Println("🚀 Sunucu 80 portunda başlatıldı...")
 	log.Fatal(http.ListenAndServe(":80", nil))
 }

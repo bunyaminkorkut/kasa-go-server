@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 )
 
@@ -54,4 +55,122 @@ func (repo *KasaRepository) GetMyGroups(userID string) (*sql.Rows, error) {
 		return nil, err
 	}
 	return rows, nil
+}
+
+func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMember string) error {
+	_, err := repo.DB.Exec("INSERT INTO group_add_requests (group_id, added_member) VALUES (?, ?)", groupID, addedMember)
+	if err != nil {
+		log.Println("Grup ekleme isteği gönderilemedi:", err)
+		return err
+	}
+	return nil
+}
+
+func (repo *KasaRepository) getMyAddRequests(userID string) (*sql.Rows, error) {
+	rows, err := repo.DB.Query(`
+	SELECT *
+	FROM group_add_requests gar
+	JOIN groups g ON gar.group_id = g.id
+	WHERE gar.added_member = ?
+	ORDER BY gar.requested_at DESC
+`, userID)
+
+	if err != nil {
+		log.Println("Grup ekleme istekleri alınamadı:", err)
+		return nil, err
+	}
+	return rows, nil
+}
+
+func (repo *KasaRepository) acceptAddRequest(requestID int64, userID string) error {
+	tx, err := repo.DB.Begin()
+	if err != nil {
+		log.Println("Transaction başlatılamadı:", err)
+		return err
+	}
+
+	var groupID int64
+	var reqUserID string
+
+	// 1. Gerekli bilgileri al (group_id ve user_id)
+	err = tx.QueryRow("SELECT group_id, user_id FROM group_add_requests WHERE request_id = ?", requestID).Scan(&groupID, &reqUserID)
+	if err != nil {
+		tx.Rollback()
+		log.Println("Grup ID veya kullanıcı ID alınamadı:", err)
+		return err
+	}
+
+	// 2. userID doğruluğunu kontrol et
+	if reqUserID != userID {
+		tx.Rollback()
+		log.Printf("Yetkisiz işlem: parametre userID '%s' != veritabanı userID '%s'\n", userID, reqUserID)
+		return fmt.Errorf("yetkisiz işlem: kullanıcı uyuşmazlığı")
+	}
+
+	// 3. İsteği 'accepted' olarak güncelle
+	_, err = tx.Exec("UPDATE group_add_requests SET request_status = 'accepted' WHERE request_id = ?", requestID)
+	if err != nil {
+		tx.Rollback()
+		log.Println("Grup ekleme isteği güncellenemedi:", err)
+		return err
+	}
+
+	// 4. Kullanıcıyı gruba ekle
+	_, err = tx.Exec("INSERT INTO group_members (group_id, user_id) VALUES (?, ?)", groupID, userID)
+	if err != nil {
+		tx.Rollback()
+		log.Println("Kullanıcı gruba eklenemedi:", err)
+		return err
+	}
+
+	// 5. Commit işlemi
+	err = tx.Commit()
+	if err != nil {
+		log.Println("Transaction commit edilemedi:", err)
+		return err
+	}
+
+	return nil
+}
+
+func (repo *KasaRepository) rejectAddRequest(requestID int64, userID string) error {
+	tx, err := repo.DB.Begin()
+	if err != nil {
+		log.Println("Transaction başlatılamadı:", err)
+		return err
+	}
+
+	var reqUserID string
+
+	// 1. İstek sahibi kim kontrol et
+	err = tx.QueryRow("SELECT user_id FROM group_add_requests WHERE request_id = ?", requestID).Scan(&reqUserID)
+	if err != nil {
+		tx.Rollback()
+		log.Println("İstek bilgisi alınamadı:", err)
+		return err
+	}
+
+	// 2. userID doğruluğunu kontrol et
+	if reqUserID != userID {
+		tx.Rollback()
+		log.Printf("Yetkisiz işlem: parametre userID '%s' != veritabanı userID '%s'\n", userID, reqUserID)
+		return fmt.Errorf("yetkisiz işlem: kullanıcı uyuşmazlığı")
+	}
+
+	// 3. İsteği 'rejected' olarak güncelle
+	_, err = tx.Exec("UPDATE group_add_requests SET request_status = 'rejected' WHERE request_id = ?", requestID)
+	if err != nil {
+		tx.Rollback()
+		log.Println("Grup ekleme isteği reddedilemedi:", err)
+		return err
+	}
+
+	// 4. Commit işlemi
+	err = tx.Commit()
+	if err != nil {
+		log.Println("Transaction commit edilemedi:", err)
+		return err
+	}
+
+	return nil
 }

@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS group_add_requests (
     group_id INT NOT NULL,
     user_id VARCHAR(100) NOT NULL,
     requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    request_status ENUM('pending', 'accepted', 'rejected') DEFAULT 'pending',
     FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
