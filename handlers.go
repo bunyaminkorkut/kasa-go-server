@@ -303,19 +303,23 @@ func handleGetAddRequests(repo *KasaRepository) http.HandlerFunc {
 
 		var requests []map[string]interface{}
 		for rows.Next() {
+			var requestID int64
 			var groupID int64
-			var addedMember string
+			var groupName string
 			var requestedAt int64
-			var request_status string
-			if err := rows.Scan(&groupID, &addedMember, &requestedAt); err != nil {
+			var requestStatus string
+
+			if err := rows.Scan(&requestID, &groupID, &groupName, &requestedAt, &requestStatus); err != nil {
 				http.Error(w, "Grup ekleme istekleri okunamadı", http.StatusInternalServerError)
 				return
 			}
+
 			requests = append(requests, map[string]interface{}{
-				"group_id":     groupID,
-				"added_member": addedMember,
-				"requested_at": requestedAt,
-				"status":       request_status, // Varsayılan olarak pending
+				"request_id":     requestID,
+				"group_id":       groupID,
+				"group_name":     groupName,
+				"requested_at":   requestedAt,
+				"request_status": requestStatus,
 			})
 		}
 

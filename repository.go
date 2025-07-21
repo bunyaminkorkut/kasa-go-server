@@ -85,12 +85,12 @@ func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail string
 
 func (repo *KasaRepository) getMyAddRequests(userID string) (*sql.Rows, error) {
 	rows, err := repo.DB.Query(`
-	SELECT *
-	FROM group_add_requests gar
-	JOIN groups g ON gar.group_id = g.id
-	WHERE gar.user_id = ?
-	ORDER BY gar.requested_at DESC
-`, userID)
+		SELECT gar.request_id, gar.group_id, g.group_name, UNIX_TIMESTAMP(gar.requested_at), gar.request_status
+		FROM group_add_requests gar
+		JOIN groups g ON gar.group_id = g.id
+		WHERE gar.user_id = ?
+		ORDER BY gar.requested_at DESC
+	`, userID)
 
 	if err != nil {
 		log.Println("Grup ekleme istekleri alınamadı:", err)
