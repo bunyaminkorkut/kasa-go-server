@@ -18,6 +18,7 @@ func (repo *UserRepository) CreateUser(id, username, email, hashedPassword strin
 func (repo *UserRepository) CreateGroup(creatorID, groupName string) (int64, error) {
 	result, err := repo.DB.Exec("INSERT INTO groups (group_name, creator_id) VALUES (?, ?)", groupName, creatorID)
 	if err != nil {
+		log.Println("Grup oluşturma hatası:", err)
 		return 0, err
 	}
 
@@ -28,6 +29,7 @@ func (repo *UserRepository) CreateGroup(creatorID, groupName string) (int64, err
 
 	_, err = repo.DB.Exec("INSERT INTO group_members (group_id, user_id) VALUES (?, ?)", groupID, creatorID)
 	if err != nil {
+		log.Println("Grup üyesi ekleme hatası:", err)
 		return 0, err
 	}
 
