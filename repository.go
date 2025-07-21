@@ -25,6 +25,7 @@ func (repo *UserRepository) CreateGroup(creatorID, groupName string) (int64, err
 	if err != nil {
 		return 0, err
 	}
+
 	_, err = repo.DB.Exec("INSERT INTO group_members (group_id, user_id) VALUES (?, ?)", groupID, creatorID)
 	if err != nil {
 		return 0, err
