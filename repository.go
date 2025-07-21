@@ -58,7 +58,7 @@ func (repo *KasaRepository) GetMyGroups(userID string) (*sql.Rows, error) {
 }
 
 func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMember string) error {
-	_, err := repo.DB.Exec("INSERT INTO group_add_requests (group_id, added_member) VALUES (?, ?)", groupID, addedMember)
+	_, err := repo.DB.Exec("INSERT INTO group_add_requests (group_id, user_id) VALUES (?, ?)", groupID, addedMember)
 	if err != nil {
 		log.Println("Grup ekleme isteği gönderilemedi:", err)
 		return err
@@ -71,7 +71,7 @@ func (repo *KasaRepository) getMyAddRequests(userID string) (*sql.Rows, error) {
 	SELECT *
 	FROM group_add_requests gar
 	JOIN groups g ON gar.group_id = g.id
-	WHERE gar.added_member = ?
+	WHERE gar.user_id = ?
 	ORDER BY gar.requested_at DESC
 `, userID)
 
