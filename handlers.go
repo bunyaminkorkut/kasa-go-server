@@ -357,9 +357,37 @@ func handleAcceptAddRequest(repo *KasaRepository) http.HandlerFunc {
 			http.Error(w, "Grup ekleme isteği kabul edilemedi", http.StatusInternalServerError)
 			return
 		}
+		rows, err := repo.getMyAddRequests(userUID.(string))
+		if err != nil {
+			http.Error(w, "Grup ekleme istekleri alınamadı", http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
 
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"message": "Grup ekleme isteği kabul edildi"})
+		var requests []map[string]interface{}
+		for rows.Next() {
+			var requestID int64
+			var groupID int64
+			var groupName string
+			var requestedAt int64
+			var requestStatus string
+
+			if err := rows.Scan(&requestID, &groupID, &groupName, &requestedAt, &requestStatus); err != nil {
+				http.Error(w, "Grup ekleme istekleri okunamadı", http.StatusInternalServerError)
+				return
+			}
+
+			requests = append(requests, map[string]interface{}{
+				"request_id":     requestID,
+				"group_id":       groupID,
+				"group_name":     groupName,
+				"requested_at":   requestedAt,
+				"request_status": requestStatus,
+			})
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(requests)
 	}
 }
 
@@ -393,7 +421,36 @@ func handleRejectAddRequest(repo *KasaRepository) http.HandlerFunc {
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"message": "Grup ekleme isteği kabul edildi"})
+		rows, err := repo.getMyAddRequests(userUID.(string))
+		if err != nil {
+			http.Error(w, "Grup ekleme istekleri alınamadı", http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		var requests []map[string]interface{}
+		for rows.Next() {
+			var requestID int64
+			var groupID int64
+			var groupName string
+			var requestedAt int64
+			var requestStatus string
+
+			if err := rows.Scan(&requestID, &groupID, &groupName, &requestedAt, &requestStatus); err != nil {
+				http.Error(w, "Grup ekleme istekleri okunamadı", http.StatusInternalServerError)
+				return
+			}
+
+			requests = append(requests, map[string]interface{}{
+				"request_id":     requestID,
+				"group_id":       groupID,
+				"group_name":     groupName,
+				"requested_at":   requestedAt,
+				"request_status": requestStatus,
+			})
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(requests)
 	}
 }
