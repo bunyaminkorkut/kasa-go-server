@@ -145,3 +145,49 @@ func LoginUserHandler(repo *UserRepository) http.HandlerFunc {
 		})
 	}
 }
+
+type CreateGroupRequest struct {
+	GroupName string `json:"group_name"`
+}
+
+func CreateGroupHandler(repo *UserRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Yalnızca POST metodu desteklenir", http.StatusMethodNotAllowed)
+			return
+		}
+
+		userUID := r.Context().Value("userUID")
+		if userUID == nil {
+			http.Error(w, "Yetkisiz erişim", http.StatusUnauthorized)
+			return
+		}
+
+		var req CreateGroupRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Geçersiz JSON", http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+
+		req.GroupName = strings.TrimSpace(req.GroupName)
+		if req.GroupName == "" {
+			http.Error(w, "group_name alanı zorunludur", http.StatusBadRequest)
+			return
+		}
+
+		groupID, err := repo.CreateGroup(userUID.(string), req.GroupName)
+		if err != nil {
+			http.Error(w, "Grup oluşturulamadı", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"message":    "Grup başarıyla oluşturuldu",
+			"group_id":   groupID,
+			"group_name": req.GroupName,
+		})
+	}
+}

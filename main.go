@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -56,7 +57,12 @@ func main() {
 		}
 	}
 	fmt.Println("✅ SQL script başarıyla çalıştırıldı.")
-	connectToFirebase()
+	firebaseAuth, err := connectToFirebase(context.Background())
+	if err != nil {
+		log.Fatal("❌ Firebase bağlantısı başarısız:", err)
+	}
+	FirebaseAuth = firebaseAuth // middleware erişebilsin diye global değişkene ata
+
 	// Sunucu başlatma
 	repo := &UserRepository{DB: db}
 
@@ -71,6 +77,8 @@ func main() {
 	http.HandleFunc("/register", RegisterUserHandler(repo))
 
 	http.HandleFunc("/login", LoginUserHandler(repo))
+
+	http.Handle("/create-group", FirebaseAuthMiddleware(CreateGroupHandler(repo)))
 
 	fmt.Println("🚀 Sunucu 80 portunda başlatıldı...")
 	log.Fatal(http.ListenAndServe(":80", nil))

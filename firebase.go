@@ -14,32 +14,31 @@ import (
 	"google.golang.org/api/option"
 )
 
+var FirebaseAuth *auth.Client
+
 // FirebaseConfig yapısı FIREBASE_CONFIG JSON'undaki veriyi temsil eder
 type FirebaseConfig struct {
 	APIKey string `json:"apiKey"`
 }
 
-func connectToFirebase() {
-	ctx := context.Background()
-
+func connectToFirebase(ctx context.Context) (*auth.Client, error) {
 	credsFile := os.Getenv("FIREBASE_CREDENTIALS")
 	if credsFile == "" {
-		log.Fatal("❌ FIREBASE_CREDENTIALS .env içinde tanımlı değil")
+		return nil, fmt.Errorf("❌ FIREBASE_CREDENTIALS .env içinde tanımlı değil")
 	}
 
 	opt := option.WithCredentialsFile(credsFile)
-
 	app, err := firebase.NewApp(ctx, nil, opt)
 	if err != nil {
-		log.Fatalf("❌ Firebase başlatılamadı: %v", err)
+		return nil, fmt.Errorf("❌ Firebase başlatılamadı: %w", err)
 	}
 
-	_, err = app.Firestore(ctx)
+	authClient, err := app.Auth(ctx)
 	if err != nil {
-		log.Fatalf("❌ Firestore bağlantısı başarısız: %v", err)
+		return nil, fmt.Errorf("❌ Firebase Auth başlatılamadı: %w", err)
 	}
 
-	fmt.Println("✅ Firebase'e başarıyla bağlanıldı")
+	return authClient, nil
 }
 
 func CreateFirebaseUser(email, password string) (string, error) {
