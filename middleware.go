@@ -48,7 +48,7 @@ func FirebaseAuthMiddleware(next http.Handler) http.Handler {
 		}
 
 		// Context'e kullanıcı UID'sini ve token bilgisini ekle
-		ctx := context.WithValue(r.Context(), "userUID", token.UID)
+		ctx := context.WithValue(r.Context(), "userUID", claims["uid"])
 		ctx = context.WithValue(ctx, "firebaseToken", token)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
