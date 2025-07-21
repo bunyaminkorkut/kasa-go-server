@@ -57,12 +57,29 @@ func (repo *KasaRepository) GetMyGroups(userID string) (*sql.Rows, error) {
 	return rows, nil
 }
 
-func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMember string) error {
-	_, err := repo.DB.Exec("INSERT INTO group_add_requests (group_id, user_id) VALUES (?, ?)", groupID, addedMember)
+func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail string) error {
+	// Email'e karşılık gelen kullanıcı ID'sini al
+	var addedMemberID string
+	err := repo.DB.QueryRow("SELECT id FROM users WHERE email = ?", addedMemberEmail).Scan(&addedMemberID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			log.Printf("Kullanıcı bulunamadı: %s\n", addedMemberEmail)
+			return fmt.Errorf("kullanıcı bulunamadı: %s", addedMemberEmail)
+		}
+		log.Println("Kullanıcı kontrolü sırasında hata:", err)
+		return err
+	}
+
+	// Grup ekleme isteğini gönder
+	_, err = repo.DB.Exec(
+		"INSERT INTO group_add_requests (group_id, user_id) VALUES (?, ?)",
+		groupID, addedMemberID,
+	)
 	if err != nil {
 		log.Println("Grup ekleme isteği gönderilemedi:", err)
 		return err
 	}
+
 	return nil
 }
 
