@@ -364,7 +364,7 @@ func handleAcceptAddRequest(repo *KasaRepository) http.HandlerFunc {
 }
 
 type RejectAddRequest struct {
-	requestID int64 `json:"request_id"`
+	RequestID int64 `json:"request_id"`
 }
 
 func handleRejectAddRequest(repo *KasaRepository) http.HandlerFunc {
@@ -380,14 +380,14 @@ func handleRejectAddRequest(repo *KasaRepository) http.HandlerFunc {
 			return
 		}
 
-		var req AcceptAddRequest
+		var req RejectAddRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "Geçersiz JSON", http.StatusBadRequest)
 			return
 		}
 		defer r.Body.Close()
 
-		err := repo.rejectAddRequest(req.requestID, userUID.(string))
+		err := repo.rejectAddRequest(req.RequestID, userUID.(string))
 		if err != nil {
 			http.Error(w, "Grup ekleme isteği kabul edilemedi", http.StatusInternalServerError)
 			return
