@@ -46,6 +46,7 @@ func (repo *KasaRepository) GetMyGroups(userID string) (*sql.Rows, error) {
     FROM groups g 
     JOIN group_members gm ON g.id = gm.group_id 
     WHERE gm.user_id = ?
+	Order by g.created_at desc
 `, userID)
 
 	if err != nil {
