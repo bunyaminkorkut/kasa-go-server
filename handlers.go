@@ -223,8 +223,9 @@ func GetGroups(repo *KasaRepository) http.HandlerFunc {
 				return
 			}
 			groups = append(groups, map[string]interface{}{
-				"id":   groupID,
-				"name": groupName,
+				"id":         groupID,
+				"name":       groupName,
+				"created_at": createdAt,
 			})
 		}
 
