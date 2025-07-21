@@ -329,7 +329,7 @@ func handleGetAddRequests(repo *KasaRepository) http.HandlerFunc {
 }
 
 type AcceptAddRequest struct {
-	requestID int64 `json:"request_id"`
+	RequestID int64 `json:"request_id"`
 }
 
 func handleAcceptAddRequest(repo *KasaRepository) http.HandlerFunc {
@@ -351,8 +351,8 @@ func handleAcceptAddRequest(repo *KasaRepository) http.HandlerFunc {
 			return
 		}
 		defer r.Body.Close()
-
-		err := repo.acceptAddRequest(req.requestID, userUID.(string))
+		log.Printf("📥 request_id geldi: %d\n", req.RequestID)
+		err := repo.acceptAddRequest(req.RequestID, userUID.(string))
 		if err != nil {
 			http.Error(w, "Grup ekleme isteği kabul edilemedi", http.StatusInternalServerError)
 			return
