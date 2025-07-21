@@ -5,13 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
-)
-
-type contextKey string
-
-const (
-	contextKeyUID   contextKey = "userUID"
-	contextKeyToken contextKey = "firebaseToken"
+	// jwt kütüphanesi, import etmen gerek
 )
 
 func FirebaseAuthMiddleware(next http.Handler) http.Handler {
@@ -32,26 +26,30 @@ func FirebaseAuthMiddleware(next http.Handler) http.Handler {
 
 		jwtToken := strings.TrimPrefix(authHeader, "Bearer ")
 
+		// Burada JWT'yi doğrulama değil sadece decode yapıyoruz (doğrulama isteğe bağlı)
 		claims, err := decodeJWTWithoutValidation(jwtToken)
 		if err != nil {
 			http.Error(w, "Geçersiz JWT token", http.StatusUnauthorized)
 			return
 		}
 
+		// claims["token"] alanını alıyoruz, burada gerçek Firebase ID Token olmalı
 		tokenValue, ok := claims["token"].(string)
 		if !ok || tokenValue == "" {
 			http.Error(w, "Firebase ID Token bulunamadı", http.StatusUnauthorized)
 			return
 		}
 
+		// Firebase ID Token'ı doğrula
 		token, err := FirebaseAuth.VerifyIDToken(context.Background(), tokenValue)
 		if err != nil {
 			http.Error(w, "Geçersiz Firebase token", http.StatusUnauthorized)
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), contextKeyUID, claims["uid"])
-		ctx = context.WithValue(ctx, contextKeyToken, token)
+		// Context'e kullanıcı UID'sini ve token bilgisini ekle
+		ctx := context.WithValue(r.Context(), "userUID", claims["uid"])
+		ctx = context.WithValue(ctx, "firebaseToken", token)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
