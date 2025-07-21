@@ -109,9 +109,18 @@ func (repo *KasaRepository) acceptAddRequest(requestID int64, userID string) err
 	var groupID int64
 	var reqUserID string
 
-	// 1. Gerekli bilgileri al (group_id ve user_id)
-	err = tx.QueryRow("SELECT group_id, user_id FROM group_add_requests WHERE request_id = ?", requestID).Scan(&groupID, &reqUserID)
-	if err != nil {
+	// 1. Gerekli bilgileri al (sadece 'pending' durumundaki istekler işlenir)
+	err = tx.QueryRow(`
+		SELECT group_id, user_id 
+		FROM group_add_requests 
+		WHERE request_id = ? AND request_status = 'pending'
+	`, requestID).Scan(&groupID, &reqUserID)
+
+	if err == sql.ErrNoRows {
+		tx.Rollback()
+		log.Printf("Geçersiz ya da işlenmiş istek: request_id=%d\n", requestID)
+		return fmt.Errorf("bu istek zaten işlenmiş veya mevcut değil")
+	} else if err != nil {
 		tx.Rollback()
 		log.Println("Grup ID veya kullanıcı ID alınamadı:", err)
 		return err
@@ -125,7 +134,11 @@ func (repo *KasaRepository) acceptAddRequest(requestID int64, userID string) err
 	}
 
 	// 3. İsteği 'accepted' olarak güncelle
-	_, err = tx.Exec("UPDATE group_add_requests SET request_status = 'accepted' WHERE request_id = ?", requestID)
+	_, err = tx.Exec(`
+		UPDATE group_add_requests 
+		SET request_status = 'accepted' 
+		WHERE request_id = ?
+	`, requestID)
 	if err != nil {
 		tx.Rollback()
 		log.Println("Grup ekleme isteği güncellenemedi:", err)
@@ -133,7 +146,10 @@ func (repo *KasaRepository) acceptAddRequest(requestID int64, userID string) err
 	}
 
 	// 4. Kullanıcıyı gruba ekle
-	_, err = tx.Exec("INSERT INTO group_members (group_id, user_id) VALUES (?, ?)", groupID, userID)
+	_, err = tx.Exec(`
+		INSERT INTO group_members (group_id, user_id) 
+		VALUES (?, ?)
+	`, groupID, userID)
 	if err != nil {
 		tx.Rollback()
 		log.Println("Kullanıcı gruba eklenemedi:", err)
@@ -147,6 +163,7 @@ func (repo *KasaRepository) acceptAddRequest(requestID int64, userID string) err
 		return err
 	}
 
+	log.Printf("✅ İstek kabul edildi: request_id=%d, user_id=%s\n", requestID, userID)
 	return nil
 }
 
