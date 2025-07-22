@@ -318,9 +318,9 @@ func SendAddRequest(repo *KasaRepository) http.HandlerFunc {
 		}
 
 		resp := map[string]interface{}{
-			"group_id":   groupID,
-			"group_name": groupName,
-			"created_ts": createdTS,
+			"id":         groupID,
+			"name":       groupName,
+			"created_at": createdTS,
 			"creator": map[string]interface{}{
 				"id":    creatorID,
 				"name":  creatorName,
