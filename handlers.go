@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -278,23 +279,71 @@ func SendAddRequest(repo *KasaRepository) http.HandlerFunc {
 
 		req.GroupID = strings.TrimSpace(req.GroupID)
 		req.AddedMember = strings.TrimSpace(req.AddedMember)
-		if req.AddedMember == "" {
-			http.Error(w, "added_member alanı zorunludur", http.StatusBadRequest)
-			return
-		}
-		if req.GroupID == "" {
-			http.Error(w, "group_id alanı zorunludur", http.StatusBadRequest)
+		if req.AddedMember == "" || req.GroupID == "" {
+			http.Error(w, "group_id ve added_member alanları zorunludur", http.StatusBadRequest)
 			return
 		}
 
-		err := repo.sendAddGroupRequest(req.GroupID, req.AddedMember)
+		row, err := repo.sendAddGroupRequest(req.GroupID, req.AddedMember, userUID.(string))
 		if err != nil {
-			http.Error(w, "Grup ekleme isteği gönderilemedi", http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"message": "Grup ekleme isteği başarıyla gönderildi"})
+		var (
+			groupID      int
+			groupName    string
+			createdTS    int64
+			creatorID    string
+			creatorName  string
+			creatorEmail string
+			membersJSON  sql.NullString
+			requestsJSON sql.NullString
+		)
+
+		err = row.Scan(
+			&groupID,
+			&groupName,
+			&createdTS,
+			&creatorID,
+			&creatorName,
+			&creatorEmail,
+			&membersJSON,
+			&requestsJSON,
+		)
+		if err != nil {
+			log.Printf("Veri okunurken hata: %v\n", err)
+			http.Error(w, "Veriler alınamadı", http.StatusInternalServerError)
+			return
+		}
+
+		resp := map[string]interface{}{
+			"group_id":   groupID,
+			"group_name": groupName,
+			"created_ts": createdTS,
+			"creator": map[string]interface{}{
+				"id":    creatorID,
+				"name":  creatorName,
+				"email": creatorEmail,
+			},
+		}
+
+		if membersJSON.Valid {
+			var members []map[string]interface{}
+			if err := json.Unmarshal([]byte(membersJSON.String), &members); err == nil {
+				resp["members"] = members
+			}
+		}
+
+		if requestsJSON.Valid {
+			var pending []map[string]interface{}
+			if err := json.Unmarshal([]byte(requestsJSON.String), &pending); err == nil {
+				resp["pending_requests"] = pending
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
 	}
 }
 

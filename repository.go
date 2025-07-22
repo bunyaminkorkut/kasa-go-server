@@ -89,17 +89,30 @@ func (repo *KasaRepository) getMyGroups(userID string) (*sql.Rows, error) {
 	`, userID)
 }
 
-func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail string) error {
+func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail, currentUserID string) (*sql.Row, error) {
 	// Email'e karşılık gelen kullanıcı ID'sini al
 	var addedMemberID string
 	err := repo.DB.QueryRow("SELECT id FROM users WHERE email = ?", addedMemberEmail).Scan(&addedMemberID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			log.Printf("Kullanıcı bulunamadı: %s\n", addedMemberEmail)
-			return fmt.Errorf("kullanıcı bulunamadı: %s", addedMemberEmail)
+			return nil, fmt.Errorf("kullanıcı bulunamadı: %s", addedMemberEmail)
 		}
 		log.Println("Kullanıcı kontrolü sırasında hata:", err)
-		return err
+		return nil, err
+	}
+
+	// Aynı istek zaten varsa tekrar ekleme
+	var count int
+	err = repo.DB.QueryRow(`
+		SELECT COUNT(*) FROM group_add_requests 
+		WHERE group_id = ? AND user_id = ? AND request_status = 'pending'
+	`, groupID, addedMemberID).Scan(&count)
+	if err != nil {
+		return nil, fmt.Errorf("mevcut istek kontrolü sırasında hata: %v", err)
+	}
+	if count > 0 {
+		return nil, fmt.Errorf("bu kullanıcıya zaten bekleyen bir istek gönderilmiş")
 	}
 
 	// Grup ekleme isteğini gönder
@@ -109,10 +122,52 @@ func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail string
 	)
 	if err != nil {
 		log.Println("Grup ekleme isteği gönderilemedi:", err)
-		return err
+		return nil, err
 	}
 
-	return nil
+	// Güncel grup bilgilerini çek
+	row := repo.DB.QueryRow(`
+		SELECT 
+			g.id AS group_id,
+			g.group_name,
+			UNIX_TIMESTAMP(g.created_at) AS created_ts,
+			u.id AS creator_id,
+			u.fullname AS creator_name,
+			u.email AS creator_email,
+
+			(
+				SELECT JSON_ARRAYAGG(JSON_OBJECT(
+					'id', gm_user.id,
+					'fullname', gm_user.fullname,
+					'email', gm_user.email
+				))
+				FROM group_members gm
+				JOIN users gm_user ON gm.user_id = gm_user.id
+				WHERE gm.group_id = g.id
+			) AS members,
+
+			(
+				SELECT JSON_ARRAYAGG(JSON_OBJECT(
+					'request_id', r.request_id,
+					'user_id', r.user_id,
+					'fullname', ru.fullname,
+					'email', ru.email,
+					'requested_at', UNIX_TIMESTAMP(r.requested_at),
+					'request_status', r.request_status,
+					'group_name', gr.group_name,
+					'group_id', gr.id
+				))
+				FROM group_add_requests r
+				JOIN users ru ON r.user_id = ru.id
+				JOIN groups gr ON r.group_id = gr.id 
+				WHERE r.group_id = g.id AND r.request_status = 'pending'
+			) AS pending_requests
+
+		FROM groups g
+		JOIN users u ON g.creator_id = u.id
+		WHERE g.id = ?
+	`, groupID)
+	return row, nil
 }
 
 func (repo *KasaRepository) getMyAddRequests(userID string) (*sql.Rows, error) {
