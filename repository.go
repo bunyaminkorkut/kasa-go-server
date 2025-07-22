@@ -41,20 +41,48 @@ func (repo *KasaRepository) GetUserByEmail(email string) (*sql.Rows, error) {
 	return repo.DB.Query("SELECT id FROM users WHERE email = ?", email)
 }
 
-func (repo *KasaRepository) GetMyGroups(userID string) (*sql.Rows, error) {
-	rows, err := repo.DB.Query(`
-    SELECT g.id, g.group_name, UNIX_TIMESTAMP(g.created_at) as created_ts
-    FROM groups g 
-    JOIN group_members gm ON g.id = gm.group_id 
-    WHERE gm.user_id = ?
-	Order by g.created_at desc
-`, userID)
+func (repo *KasaRepository) getMyGroups(userID string) (*sql.Rows, error) {
+	return repo.DB.Query(`
+		SELECT 
+			g.id AS group_id,
+			g.group_name,
+			UNIX_TIMESTAMP(g.created_at) AS created_ts,
+			u.id AS creator_id,
+			u.fullname AS creator_name,
+			u.email AS creator_email,
 
-	if err != nil {
-		log.Println("Grup bilgileri alınamadı:", err)
-		return nil, err
-	}
-	return rows, nil
+			(
+				SELECT JSON_ARRAYAGG(JSON_OBJECT(
+					'id', gm_user.id,
+					'fullname', gm_user.fullname,
+					'email', gm_user.email
+				))
+				FROM group_members gm
+				JOIN users gm_user ON gm.user_id = gm_user.id
+				WHERE gm.group_id = g.id
+			) AS members,
+
+			(
+				SELECT JSON_ARRAYAGG(JSON_OBJECT(
+					'request_id', r.request_id,
+					'user_id', r.user_id,
+					'fullname', ru.fullname,
+					'email', ru.email,
+					'requested_at', UNIX_TIMESTAMP(r.requested_at),
+					'request_status', r.request_status
+				))
+				FROM group_add_requests r
+				JOIN users ru ON r.user_id = ru.id
+				WHERE r.group_id = g.id AND r.request_status = 'pending'
+			) AS pending_requests
+
+		FROM groups g
+		JOIN users u ON g.creator_id = u.id
+		JOIN group_members gm ON g.id = gm.group_id
+		WHERE gm.user_id = ?
+		GROUP BY g.id
+		ORDER BY g.created_at DESC
+	`, userID)
 }
 
 func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail string) error {

@@ -195,7 +195,7 @@ func CreateGroupHandler(repo *KasaRepository) http.HandlerFunc {
 func GetGroups(repo *KasaRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
-			http.Error(w, "Yalnızca POST metodu desteklenir", http.StatusMethodNotAllowed)
+			http.Error(w, "Yalnızca GET metodu desteklenir", http.StatusMethodNotAllowed)
 			return
 		}
 
@@ -205,9 +205,9 @@ func GetGroups(repo *KasaRepository) http.HandlerFunc {
 			return
 		}
 
-		rows, err := repo.GetMyGroups(userUID.(string))
-
+		rows, err := repo.getMyGroups(userUID.(string))
 		if err != nil {
+			log.Println("Grup bilgileri alınamadı:", err)
 			http.Error(w, "Grup bilgileri alınamadı", http.StatusInternalServerError)
 			return
 		}
@@ -216,19 +216,34 @@ func GetGroups(repo *KasaRepository) http.HandlerFunc {
 		var groups []map[string]interface{}
 		for rows.Next() {
 			var groupID int64
-			var groupName string
+			var groupName, creatorID, creatorName string
 			var createdAt int64
-			if err := rows.Scan(&groupID, &groupName, &createdAt); err != nil {
-				http.Error(w, "Grup bilgileri okunamadı", http.StatusInternalServerError)
+			var membersJSON, requestsJSON []byte
+
+			if err := rows.Scan(&groupID, &groupName, &createdAt, &creatorID, &creatorName, &membersJSON, &requestsJSON); err != nil {
+				log.Println("Satır okunamadı:", err)
+				http.Error(w, "Grup bilgileri alınamadı", http.StatusInternalServerError)
 				return
 			}
+
+			var members, requests []map[string]interface{}
+			_ = json.Unmarshal(membersJSON, &members)
+			_ = json.Unmarshal(requestsJSON, &requests)
+
 			groups = append(groups, map[string]interface{}{
 				"id":         groupID,
 				"name":       groupName,
 				"created_at": createdAt,
+				"creator": map[string]interface{}{
+					"id":       creatorID,
+					"fullname": creatorName,
+				},
+				"members":          members,
+				"pending_requests": requests,
 			})
 		}
 
+		// 🔽 Dikkat: döngü bittikten sonra encode et
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(groups)
 	}
@@ -387,7 +402,7 @@ func handleAcceptAddRequest(repo *KasaRepository) http.HandlerFunc {
 			})
 		}
 
-		groupRows, err := repo.GetMyGroups(userUID.(string))
+		groupRows, err := repo.getMyGroups(userUID.(string))
 		if err != nil {
 			http.Error(w, "Grup bilgileri alınamadı", http.StatusInternalServerError)
 			return
