@@ -322,9 +322,9 @@ func SendAddRequest(repo *KasaRepository) http.HandlerFunc {
 			"name":       groupName,
 			"created_at": createdTS,
 			"creator": map[string]interface{}{
-				"id":    creatorID,
-				"name":  creatorName,
-				"email": creatorEmail,
+				"id":       creatorID,
+				"fullname": creatorName,
+				"email":    creatorEmail,
 			},
 		}
 
