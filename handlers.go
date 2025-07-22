@@ -357,22 +357,23 @@ func handleAcceptAddRequest(repo *KasaRepository) http.HandlerFunc {
 			http.Error(w, "Grup ekleme isteği kabul edilemedi", http.StatusInternalServerError)
 			return
 		}
-		rows, err := repo.getMyAddRequests(userUID.(string))
+
+		reqRows, err := repo.getMyAddRequests(userUID.(string))
 		if err != nil {
 			http.Error(w, "Grup ekleme istekleri alınamadı", http.StatusInternalServerError)
 			return
 		}
-		defer rows.Close()
+		defer reqRows.Close()
 
 		var requests []map[string]interface{}
-		for rows.Next() {
+		for reqRows.Next() {
 			var requestID int64
 			var groupID int64
 			var groupName string
 			var requestedAt int64
 			var requestStatus string
 
-			if err := rows.Scan(&requestID, &groupID, &groupName, &requestedAt, &requestStatus); err != nil {
+			if err := reqRows.Scan(&requestID, &groupID, &groupName, &requestedAt, &requestStatus); err != nil {
 				http.Error(w, "Grup ekleme istekleri okunamadı", http.StatusInternalServerError)
 				return
 			}
@@ -386,8 +387,35 @@ func handleAcceptAddRequest(repo *KasaRepository) http.HandlerFunc {
 			})
 		}
 
+		groupRows, err := repo.GetMyGroups(userUID.(string))
+		if err != nil {
+			http.Error(w, "Grup bilgileri alınamadı", http.StatusInternalServerError)
+			return
+		}
+		defer groupRows.Close()
+
+		var groups []map[string]interface{}
+		for groupRows.Next() {
+			var groupID int64
+			var groupName string
+			var createdAt int64
+			if err := groupRows.Scan(&groupID, &groupName, &createdAt); err != nil {
+				http.Error(w, "Grup bilgileri okunamadı", http.StatusInternalServerError)
+				return
+			}
+			groups = append(groups, map[string]interface{}{
+				"id":         groupID,
+				"name":       groupName,
+				"created_at": createdAt,
+			})
+		}
+
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(requests)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"message":  "Grup ekleme isteği kabul edildi",
+			"requests": requests,
+			"groups":   groups,
+		})
 	}
 }
 
@@ -417,7 +445,7 @@ func handleRejectAddRequest(repo *KasaRepository) http.HandlerFunc {
 
 		err := repo.rejectAddRequest(req.RequestID, userUID.(string))
 		if err != nil {
-			http.Error(w, "Grup ekleme isteği kabul edilemedi", http.StatusInternalServerError)
+			http.Error(w, "Grup ekleme isteği red edilemedi", http.StatusInternalServerError)
 			return
 		}
 
