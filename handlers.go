@@ -318,7 +318,7 @@ func handleGetAddRequests(repo *KasaRepository) http.HandlerFunc {
 		}
 		defer rows.Close()
 
-		var requests []map[string]interface{}
+		requests := make([]map[string]interface{}, 0)
 		for rows.Next() {
 			var requestID int64
 			var groupID int64
