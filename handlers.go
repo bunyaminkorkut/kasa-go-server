@@ -321,6 +321,7 @@ func SendAddRequest(repo *KasaRepository) http.HandlerFunc {
 			"id":         groupID,
 			"name":       groupName,
 			"created_at": createdTS,
+			"is_admin":   creatorID == userUID.(string),
 			"creator": map[string]interface{}{
 				"id":       creatorID,
 				"fullname": creatorName,
