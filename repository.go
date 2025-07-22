@@ -71,6 +71,7 @@ func (repo *KasaRepository) getMyGroups(userID string) (*sql.Rows, error) {
 					'requested_at', UNIX_TIMESTAMP(r.requested_at),
 					'request_status', r.request_status,
 					'group_name', gr.group_name
+					'group_id', gr.id
 				))
 				FROM group_add_requests r
 				JOIN users ru ON r.user_id = ru.id
