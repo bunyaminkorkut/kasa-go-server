@@ -234,6 +234,7 @@ func GetGroups(repo *KasaRepository) http.HandlerFunc {
 				"id":         groupID,
 				"name":       groupName,
 				"created_at": createdAt,
+				"is_admin":   creatorID == userUID.(string),
 				"creator": map[string]interface{}{
 					"id":       creatorID,
 					"fullname": creatorName,
@@ -413,16 +414,32 @@ func handleAcceptAddRequest(repo *KasaRepository) http.HandlerFunc {
 		var groups []map[string]interface{}
 		for groupRows.Next() {
 			var groupID int64
-			var groupName string
+			var groupName, creatorID, creatorName, creatorEmail string
 			var createdAt int64
-			if err := groupRows.Scan(&groupID, &groupName, &createdAt); err != nil {
-				http.Error(w, "Grup bilgileri okunamadı", http.StatusInternalServerError)
+			var membersJSON, requestsJSON []byte
+
+			if err := groupRows.Scan(&groupID, &groupName, &createdAt, &creatorID, &creatorName, &creatorEmail, &membersJSON, &requestsJSON); err != nil {
+				log.Println("Satır okunamadı:", err)
+				http.Error(w, "Grup bilgileri alınamadı", http.StatusInternalServerError)
 				return
 			}
+
+			var members, requests []map[string]interface{}
+			_ = json.Unmarshal(membersJSON, &members)
+			_ = json.Unmarshal(requestsJSON, &requests)
+
 			groups = append(groups, map[string]interface{}{
 				"id":         groupID,
 				"name":       groupName,
 				"created_at": createdAt,
+				"is_admin":   creatorID == userUID.(string),
+				"creator": map[string]interface{}{
+					"id":       creatorID,
+					"fullname": creatorName,
+					"email":    creatorEmail,
+				},
+				"members":          members,
+				"pending_requests": requests,
 			})
 		}
 
