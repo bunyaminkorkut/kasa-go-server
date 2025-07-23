@@ -310,6 +310,7 @@ func SendAddRequest(repo *KasaRepository) http.HandlerFunc {
 			creatorEmail string
 			membersJSON  sql.NullString
 			requestsJSON sql.NullString
+			expensesJSON sql.NullString
 		)
 
 		err = row.Scan(
@@ -321,6 +322,7 @@ func SendAddRequest(repo *KasaRepository) http.HandlerFunc {
 			&creatorEmail,
 			&membersJSON,
 			&requestsJSON,
+			&expensesJSON,
 		)
 		if err != nil {
 			log.Printf("Veri okunurken hata: %v\n", err)
@@ -351,6 +353,13 @@ func SendAddRequest(repo *KasaRepository) http.HandlerFunc {
 			var pending []map[string]interface{}
 			if err := json.Unmarshal([]byte(requestsJSON.String), &pending); err == nil {
 				resp["pending_requests"] = pending
+			}
+		}
+
+		if expensesJSON.Valid {
+			var expenses []map[string]interface{}
+			if err := json.Unmarshal([]byte(expensesJSON.String), &expenses); err == nil {
+				resp["expenses"] = expenses
 			}
 		}
 
