@@ -324,7 +324,6 @@ func (repo *KasaRepository) createGroupExpense(payerID string, req CreateExpense
 	}
 
 	var shareAmounts []float64
-	var userIDs []string
 	allHaveAmount := true
 
 	for _, user := range req.Users {
@@ -333,7 +332,6 @@ func (repo *KasaRepository) createGroupExpense(payerID string, req CreateExpense
 			break
 		}
 		shareAmounts = append(shareAmounts, *user.Amount)
-		userIDs = append(userIDs, user.UserID)
 	}
 
 	if allHaveAmount {
@@ -352,14 +350,19 @@ func (repo *KasaRepository) createGroupExpense(payerID string, req CreateExpense
 		}
 	}
 
-	stmt, err := tx.Prepare("INSERT INTO group_expense_participants (expense_id, user_id, amount_share) VALUES (?, ?, ?)")
+	stmt, err := tx.Prepare("INSERT INTO group_expense_participants (expense_id, user_id, amount_share, payment_status) VALUES (?, ?, ?, ?)")
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 
 	for _, user := range req.Users {
-		_, err := stmt.Exec(expenseID, user.UserID, *user.Amount)
+		paymentStatus := "unpaid"
+		if user.UserID == payerID {
+			paymentStatus = "paid"
+		}
+
+		_, err := stmt.Exec(expenseID, user.UserID, *user.Amount, paymentStatus)
 		if err != nil {
 			return err
 		}
