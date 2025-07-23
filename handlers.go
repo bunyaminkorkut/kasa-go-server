@@ -635,7 +635,7 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 		}
 
 		// Grup expense'i oluştur ve güncel grup verisini al
-		row, err := repo.createGroupExpenseAndReturnGroupRow(userUID.(string), req)
+		row, err := repo.createGroupExpenseAndReturnGroupRow(r.Context(), userUID.(string), req)
 		if err != nil {
 			// Özel hata mesajları
 			if strings.Contains(err.Error(), "katılımcı tutarları toplamı") {
