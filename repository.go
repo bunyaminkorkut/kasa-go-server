@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 )
@@ -353,52 +354,76 @@ func (repo *KasaRepository) rejectAddRequest(requestID int64, userID string) err
 func (repo *KasaRepository) createGroupExpenseAndReturnGroupRow(ctx context.Context, payerID string, req CreateExpenseRequest) (*sql.Row, error) {
 	tx, err := repo.DB.Begin()
 	if err != nil {
-		return nil, err
+		return nil, errors.New("transaction başlatılamadı: " + err.Error())
 	}
 
 	var txErr error
+	var result sql.Result
+
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 		} else {
-			tx.Commit()
+			txErr = tx.Commit()
 		}
 	}()
 
-	result, txErr := tx.Exec(
+	result, txErr = tx.ExecContext(ctx,
 		`INSERT INTO group_expenses (group_id, payer_id, amount, description_note, payment_title, bill_image_url, payment_date)
-         VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+		 VALUES (?, ?, ?, ?, ?, ?, NOW())`,
 		req.GroupID, payerID, req.TotalAmount, req.Note, req.PaymentTitle, req.BillImageURL,
 	)
 	if txErr != nil {
-		return nil, txErr
+		return nil, errors.New("harcama eklenemedi: " + txErr.Error())
 	}
 
-	expenseID, txErr := result.LastInsertId()
+	var expenseID int64
+	expenseID, txErr = result.LastInsertId()
 	if txErr != nil {
-		return nil, txErr
+		return nil, errors.New("son eklenen harcama ID'si alınamadı: " + txErr.Error())
 	}
 
-	// ... pay share logic ...
-
-	stmt, txErr := tx.Prepare("INSERT INTO group_expense_participants (expense_id, user_id, amount_share, payment_status) VALUES (?, ?, ?, ?)")
+	// Prepare the statement for participants outside the loop for efficiency
+	stmt, txErr := tx.PrepareContext(ctx, "INSERT INTO group_expense_participants (expense_id, user_id, amount_share, payment_status) VALUES (?, ?, ?, ?)")
 	if txErr != nil {
+		return nil, errors.New("katılımcı ekleme sorgusu hazırlanamadı: " + txErr.Error())
+	}
+	defer stmt.Close() // Close the prepared statement when done
+
+	// --- IMPORTANT FIX: Nil pointer dereference check ---
+	// Calculate total shares to validate against TotalAmount
+	var sumOfParticipantShares float64
+	for _, user := range req.Users {
+		if user.Amount == nil {
+			// Set txErr to trigger rollback
+			txErr = errors.New("participant amount cannot be null")
+			return nil, txErr // Return immediately with the error
+		}
+		sumOfParticipantShares += *user.Amount
+	}
+
+	// Basic check: Sum of participant shares should ideally match total amount
+	// You might need more sophisticated logic for rounding or small discrepancies
+	if sumOfParticipantShares != req.TotalAmount {
+		txErr = errors.New("katılımcı tutarları toplamı genel tutar ile eşleşmiyor")
 		return nil, txErr
 	}
-	defer stmt.Close()
+	// --- End of nil pointer dereference fix and sum validation ---
 
+	// Insert participants
 	for _, user := range req.Users {
 		paymentStatus := "unpaid"
 		if user.UserID == payerID {
 			paymentStatus = "paid"
 		}
 
-		_, txErr = stmt.Exec(expenseID, user.UserID, *user.Amount, paymentStatus)
+		_, txErr = stmt.ExecContext(ctx, expenseID, user.UserID, *user.Amount, paymentStatus) // user.Amount is now guaranteed not to be nil
 		if txErr != nil {
-			return nil, txErr
+			return nil, errors.New("katılımcı eklenemedi: " + txErr.Error())
 		}
 	}
 
+	// Query the updated group data
 	row := tx.QueryRowContext(ctx, `
         SELECT
           g.id AS group_id,
@@ -464,6 +489,5 @@ func (repo *KasaRepository) createGroupExpenseAndReturnGroupRow(ctx context.Cont
         JOIN users u ON g.creator_id = u.id
         WHERE g.id = ?
     `, req.GroupID)
-
 	return row, nil
 }

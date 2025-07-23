@@ -607,15 +607,20 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 			return
 		}
 
-		userUID := r.Context().Value("userUID")
-		if userUID == nil {
-			http.Error(w, "Yetkisiz erişim", http.StatusUnauthorized)
+		userUIDVal := r.Context().Value("userUID")
+		if userUIDVal == nil {
+			http.Error(w, "Yetkisiz erişim: userUID bulunamadı", http.StatusUnauthorized)
+			return
+		}
+		userUID, ok := userUIDVal.(string)
+		if !ok || userUID == "" {
+			http.Error(w, "Yetkisiz erişim: Geçersiz userUID tipi", http.StatusUnauthorized)
 			return
 		}
 
 		var req CreateExpenseRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "Geçersiz JSON", http.StatusBadRequest)
+			http.Error(w, "Geçersiz JSON formatı: "+err.Error(), http.StatusBadRequest)
 			return
 		}
 		defer r.Body.Close()
@@ -634,12 +639,17 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 			return
 		}
 
-		// Grup expense'i oluştur ve güncel grup verisini al
-		row, err := repo.createGroupExpenseAndReturnGroupRow(r.Context(), userUID.(string), req)
+		// Group expense'i oluştur ve güncel grup verisini al
+		row, err := repo.createGroupExpenseAndReturnGroupRow(r.Context(), userUID, req)
 		if err != nil {
 			// Özel hata mesajları
 			if strings.Contains(err.Error(), "katılımcı tutarları toplamı") {
 				http.Error(w, "Katılımcı tutarları toplamı genel tutar ile eşleşmiyor", http.StatusBadRequest)
+				return
+			}
+			// Catch our specific error for nil amounts
+			if strings.Contains(err.Error(), "participant amount cannot be null") {
+				http.Error(w, "Katılımcı tutarı boş olamaz", http.StatusBadRequest)
 				return
 			}
 			http.Error(w, "Harcama oluşturulamadı: "+err.Error(), http.StatusInternalServerError)
@@ -666,46 +676,40 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 			&expensesJSON,
 		); err != nil {
 			if err == sql.ErrNoRows {
-				http.Error(w, "Grup bulunamadı", http.StatusNotFound)
+				http.Error(w, "Grup bulunamadı (veritabanı tutarsızlığı olabilir)", http.StatusNotFound)
 				return
 			}
-			http.Error(w, "Veri işlenemedi: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "Grup verisi işlenemedi: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		// JSON verilerini parse et
 		var (
-			members         []interface{}
-			pendingRequests []interface{}
-			expenses        []interface{}
+			members         json.RawMessage // Use json.RawMessage to keep original JSON structure or decode into specific structs
+			pendingRequests json.RawMessage
+			expenses        json.RawMessage
 		)
 
 		// Members JSON'ını parse et
+		// Check .Valid first to avoid dereferencing NullString's String field if it's not valid
 		if membersJSON.Valid && membersJSON.String != "null" {
-			if err := json.Unmarshal([]byte(membersJSON.String), &members); err != nil {
-				// Parse hatası durumunda boş array kullan
-				members = []interface{}{}
-			}
+			members = json.RawMessage(membersJSON.String)
 		} else {
-			members = []interface{}{}
+			members = json.RawMessage("[]") // Default to empty array if null or invalid
 		}
 
 		// Pending requests JSON'ını parse et
 		if pendingRequestsJSON.Valid && pendingRequestsJSON.String != "null" {
-			if err := json.Unmarshal([]byte(pendingRequestsJSON.String), &pendingRequests); err != nil {
-				pendingRequests = []interface{}{}
-			}
+			pendingRequests = json.RawMessage(pendingRequestsJSON.String)
 		} else {
-			pendingRequests = []interface{}{}
+			pendingRequests = json.RawMessage("[]")
 		}
 
 		// Expenses JSON'ını parse et
 		if expensesJSON.Valid && expensesJSON.String != "null" {
-			if err := json.Unmarshal([]byte(expensesJSON.String), &expenses); err != nil {
-				expenses = []interface{}{}
-			}
+			expenses = json.RawMessage(expensesJSON.String)
 		} else {
-			expenses = []interface{}{}
+			expenses = json.RawMessage("[]")
 		}
 
 		// Response data'sını oluştur
@@ -716,9 +720,9 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 			"creator_id":       creatorID,
 			"creator_name":     creatorName,
 			"creator_email":    creatorEmail,
-			"members":          members,
-			"pending_requests": pendingRequests,
-			"expenses":         expenses,
+			"members":          members,         // json.RawMessage will be directly embedded
+			"pending_requests": pendingRequests, // json.RawMessage will be directly embedded
+			"expenses":         expenses,        // json.RawMessage will be directly embedded
 		}
 
 		// Başarılı response döndür
@@ -726,7 +730,7 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 		w.WriteHeader(http.StatusCreated)
 		if err := json.NewEncoder(w).Encode(groupData); err != nil {
 			// Bu noktada header zaten gönderildi, log'a yazmak en iyisi
-			// Log framework'ünüz varsa burada kullanın
+			// log.Printf("Error encoding response: %v", err) // Use your logging framework
 			return
 		}
 	}
