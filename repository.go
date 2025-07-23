@@ -422,8 +422,8 @@ func (repo *KasaRepository) createGroupExpenseAndReturnGroupRow(payerID string, 
 		}
 	}
 
-	// Gider oluşturulduktan sonra grubu tüm ilişkili verilerle birlikte getir
-	row := repo.DB.QueryRow(`
+	// Transaction içinde query çalıştır
+	row := tx.QueryRow(`
 		SELECT 
 			g.id AS group_id,
 			g.group_name,
@@ -485,6 +485,7 @@ func (repo *KasaRepository) createGroupExpenseAndReturnGroupRow(payerID string, 
 				FROM group_expenses e
 				LEFT JOIN users p ON e.payer_id = p.id
 				WHERE e.group_id = g.id
+				ORDER BY e.payment_date DESC
 			) AS expenses
 
 		FROM groups g
