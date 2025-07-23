@@ -608,89 +608,36 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 		}
 
 		userUIDVal := r.Context().Value("userUID")
-		if userUIDVal == nil {
-			http.Error(w, "Yetkisiz erişim: userUID bulunamadı", http.StatusUnauthorized)
-			return
-		}
 		userUID, ok := userUIDVal.(string)
 		if !ok || userUID == "" {
-			http.Error(w, "Yetkisiz erişim: Geçersiz userUID tipi", http.StatusUnauthorized)
+			http.Error(w, "Yetkisiz erişim", http.StatusUnauthorized)
 			return
 		}
 
 		var req CreateExpenseRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "Geçersiz JSON formatı: "+err.Error(), http.StatusBadRequest)
+			http.Error(w, "Geçersiz JSON: "+err.Error(), http.StatusBadRequest)
 			return
 		}
 		defer r.Body.Close()
 
 		if req.TotalAmount <= 0 {
-			http.Error(w, "Tutar 0'dan büyük olmalıdır", http.StatusBadRequest)
+			http.Error(w, "Tutar 0'dan büyük olmalı", http.StatusBadRequest)
 			return
 		}
 		if len(req.Users) == 0 {
-			http.Error(w, "En az bir katılımcı seçilmelidir", http.StatusBadRequest)
-			return
-		}
-		if strings.TrimSpace(req.PaymentTitle) == "" {
-			http.Error(w, "Harcama başlığı boş olamaz", http.StatusBadRequest)
+			http.Error(w, "En az bir katılımcı olmalı", http.StatusBadRequest)
 			return
 		}
 
-		// Yeni harcamayı döndür
-		row, err := repo.createGroupExpense(r.Context(), userUID, req)
+		expense, err := repo.createGroupExpense(r.Context(), userUID, req)
 		if err != nil {
 			http.Error(w, "Harcama oluşturulamadı: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		var (
-			expenseID, title, note, creatorID, billImageURL string
-			createdAt                                       int64
-			totalAmount                                     float64
-			usersJSON                                       sql.NullString
-		)
-
-		if err := row.Scan(
-			&expenseID,
-			&title,
-			&note,
-			&creatorID,
-			&totalAmount,
-			&billImageURL,
-			&createdAt,
-			&usersJSON,
-		); err != nil {
-			http.Error(w, "Harcama verisi çözümlenemedi: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		// JSON verisi (kullanıcılar)
-		var users json.RawMessage
-		if usersJSON.Valid && usersJSON.String != "null" {
-			users = json.RawMessage(usersJSON.String)
-		} else {
-			users = json.RawMessage("[]")
-		}
-
-		// Harcama nesnesini oluştur
-		expense := map[string]interface{}{
-			"expense_id":     expenseID,
-			"payment_title":  title,
-			"note":           note,
-			"creator_id":     creatorID,
-			"total_amount":   totalAmount,
-			"bill_image_url": billImageURL,
-			"created_ts":     createdAt,
-			"users":          users,
-		}
-
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-
-		if err := json.NewEncoder(w).Encode(expense); err != nil {
-			return // yazılamadı, loglanabilir
-		}
+		_ = json.NewEncoder(w).Encode(expense)
 	}
 }

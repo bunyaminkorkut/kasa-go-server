@@ -3,9 +3,10 @@ package main
 import (
 	"context"
 	"database/sql"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 )
 
 type KasaRepository struct {
@@ -351,15 +352,26 @@ func (repo *KasaRepository) rejectAddRequest(requestID int64, userID string) err
 	return nil
 }
 
-func (repo *KasaRepository) createGroupExpense(ctx context.Context, payerID string, req CreateExpenseRequest) (*sql.Row, error) {
+type ExpenseWithParticipants struct {
+	ExpenseID       int64           `json:"expense_id"`
+	GroupID         int64           `json:"group_id"`
+	PayerID         string          `json:"payer_id"`
+	PayerName       string          `json:"payer_name"`
+	Amount          float64         `json:"amount"`
+	DescriptionNote string          `json:"description_note"`
+	PaymentTitle    string          `json:"payment_title"`
+	PaymentDate     time.Time       `json:"payment_date"`
+	BillImageURL    string          `json:"bill_image_url"`
+	Participants    json.RawMessage `json:"participants"`
+}
+
+func (repo *KasaRepository) createGroupExpense(ctx context.Context, payerID string, req CreateExpenseRequest) (*ExpenseWithParticipants, error) {
 	tx, err := repo.DB.Begin()
 	if err != nil {
-		return nil, errors.New("transaction başlatılamadı: " + err.Error())
+		return nil, fmt.Errorf("transaction başlatılamadı: %w", err)
 	}
 
 	var txErr error
-	var result sql.Result
-
 	defer func() {
 		if txErr != nil {
 			_ = tx.Rollback()
@@ -368,85 +380,95 @@ func (repo *KasaRepository) createGroupExpense(ctx context.Context, payerID stri
 		}
 	}()
 
-	// 1. Harcamayı oluştur
-	result, txErr = tx.ExecContext(ctx,
+	// Harcamayı ekle
+	result, txErr := tx.ExecContext(ctx,
 		`INSERT INTO group_expenses (group_id, payer_id, amount, description_note, payment_title, bill_image_url, payment_date)
 		 VALUES (?, ?, ?, ?, ?, ?, NOW())`,
 		req.GroupID, payerID, req.TotalAmount, req.Note, req.PaymentTitle, req.BillImageURL,
 	)
 	if txErr != nil {
-		return nil, errors.New("harcama eklenemedi: " + txErr.Error())
+		return nil, fmt.Errorf("harcama eklenemedi: %w", txErr)
 	}
 
-	// 2. Yeni harcama ID’sini al
-	var expenseID int64
-	expenseID, txErr = result.LastInsertId()
+	expenseID, txErr := result.LastInsertId()
 	if txErr != nil {
-		return nil, errors.New("son eklenen harcama ID'si alınamadı: " + txErr.Error())
+		return nil, fmt.Errorf("expense ID alınamadı: %w", txErr)
 	}
 
-	// 3. Katılımcı toplamlarını doğrula
-	var sumOfParticipantShares float64
-	for _, user := range req.Users {
-		if user.Amount == nil {
-			txErr = errors.New("participant amount cannot be null")
-			return nil, txErr
+	// Katılımcı toplamını kontrol et
+	var sum float64
+	for _, u := range req.Users {
+		if u.Amount == nil {
+			return nil, fmt.Errorf("katılımcı tutarı boş olamaz")
 		}
-		sumOfParticipantShares += *user.Amount
+		sum += *u.Amount
 	}
-	if sumOfParticipantShares != req.TotalAmount {
-		txErr = errors.New("katılımcı tutarları toplamı genel tutar ile eşleşmiyor")
-		return nil, txErr
+	if sum != req.TotalAmount {
+		return nil, fmt.Errorf("tutar eşleşmiyor (%.2f != %.2f)", sum, req.TotalAmount)
 	}
 
-	// 4. Katılımcıları ekle
 	stmt, txErr := tx.PrepareContext(ctx, `
 		INSERT INTO group_expense_participants (expense_id, user_id, amount_share, payment_status)
 		VALUES (?, ?, ?, ?)
 	`)
 	if txErr != nil {
-		return nil, errors.New("katılımcı ekleme sorgusu hazırlanamadı: " + txErr.Error())
+		return nil, fmt.Errorf("participant insert hazırlanamadı: %w", txErr)
 	}
 	defer stmt.Close()
 
-	for _, user := range req.Users {
+	for _, u := range req.Users {
 		status := "unpaid"
-		if user.UserID == payerID {
+		if u.UserID == payerID {
 			status = "paid"
 		}
-		_, txErr = stmt.ExecContext(ctx, expenseID, user.UserID, *user.Amount, status)
+		_, txErr = stmt.ExecContext(ctx, expenseID, u.UserID, *u.Amount, status)
 		if txErr != nil {
-			return nil, errors.New("katılımcı eklenemedi: " + txErr.Error())
+			return nil, fmt.Errorf("katılımcı eklenemedi: %w", txErr)
 		}
 	}
 
-	// 5. Oluşturulan tek harcamayı getir
-	row := tx.QueryRowContext(ctx, `
+	var expense ExpenseWithParticipants
+	var participantsRaw sql.NullString
+
+	txErr = tx.QueryRowContext(ctx, `
 		SELECT
-			e.expense_id,
-			e.group_id,
-			e.payer_id,
-			p.fullname AS payer_name,
-			e.amount,
-			e.description_note,
-			e.payment_title,
-			e.payment_date,
-			e.bill_image_url,
+			e.expense_id, e.group_id, e.payer_id, u.fullname AS payer_name,
+			e.amount, e.description_note, e.payment_title, e.payment_date, e.bill_image_url,
 			(
 				SELECT JSON_ARRAYAGG(JSON_OBJECT(
 					'user_id', ep.user_id,
-					'user_name', u.fullname,
+					'user_name', uu.fullname,
 					'amount_share', ep.amount_share,
 					'payment_status', ep.payment_status
 				))
 				FROM group_expense_participants ep
-				LEFT JOIN users u ON ep.user_id = u.id
+				LEFT JOIN users uu ON uu.id = ep.user_id
 				WHERE ep.expense_id = e.expense_id
 			) AS participants
 		FROM group_expenses e
-		LEFT JOIN users p ON e.payer_id = p.id
+		LEFT JOIN users u ON u.id = e.payer_id
 		WHERE e.expense_id = ?
-	`, expenseID)
+	`, expenseID).Scan(
+		&expense.ExpenseID,
+		&expense.GroupID,
+		&expense.PayerID,
+		&expense.PayerName,
+		&expense.Amount,
+		&expense.DescriptionNote,
+		&expense.PaymentTitle,
+		&expense.PaymentDate,
+		&expense.BillImageURL,
+		&participantsRaw,
+	)
+	if txErr != nil {
+		return nil, fmt.Errorf("expense okunamadı: %w", txErr)
+	}
 
-	return row, nil
+	if participantsRaw.Valid {
+		expense.Participants = json.RawMessage(participantsRaw.String)
+	} else {
+		expense.Participants = json.RawMessage("[]")
+	}
+
+	return &expense, nil
 }
