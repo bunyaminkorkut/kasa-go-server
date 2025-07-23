@@ -351,7 +351,7 @@ func (repo *KasaRepository) rejectAddRequest(requestID int64, userID string) err
 	return nil
 }
 
-func (repo *KasaRepository) createGroupExpenseAndReturnGroupRow(ctx context.Context, payerID string, req CreateExpenseRequest) (*sql.Row, error) {
+func (repo *KasaRepository) createGroupExpense(ctx context.Context, payerID string, req CreateExpenseRequest) (*sql.Row, error) {
 	tx, err := repo.DB.Begin()
 	if err != nil {
 		return nil, errors.New("transaction başlatılamadı: " + err.Error())
@@ -368,6 +368,7 @@ func (repo *KasaRepository) createGroupExpenseAndReturnGroupRow(ctx context.Cont
 		}
 	}()
 
+	// 1. Harcamayı oluştur
 	result, txErr = tx.ExecContext(ctx,
 		`INSERT INTO group_expenses (group_id, payer_id, amount, description_note, payment_title, bill_image_url, payment_date)
 		 VALUES (?, ?, ?, ?, ?, ?, NOW())`,
@@ -377,119 +378,75 @@ func (repo *KasaRepository) createGroupExpenseAndReturnGroupRow(ctx context.Cont
 		return nil, errors.New("harcama eklenemedi: " + txErr.Error())
 	}
 
+	// 2. Yeni harcama ID’sini al
 	var expenseID int64
 	expenseID, txErr = result.LastInsertId()
 	if txErr != nil {
 		return nil, errors.New("son eklenen harcama ID'si alınamadı: " + txErr.Error())
 	}
 
-	// Prepare the statement for participants outside the loop for efficiency
-	stmt, txErr := tx.PrepareContext(ctx, "INSERT INTO group_expense_participants (expense_id, user_id, amount_share, payment_status) VALUES (?, ?, ?, ?)")
-
-	if txErr != nil {
-		return nil, errors.New("katılımcı ekleme sorgusu hazırlanamadı: " + txErr.Error())
-	}
-	defer stmt.Close() // Close the prepared statement when done
-
-	// --- IMPORTANT FIX: Nil pointer dereference check ---
-	// Calculate total shares to validate against TotalAmount
+	// 3. Katılımcı toplamlarını doğrula
 	var sumOfParticipantShares float64
 	for _, user := range req.Users {
 		if user.Amount == nil {
-			// Set txErr to trigger rollback
 			txErr = errors.New("participant amount cannot be null")
-			return nil, txErr // Return immediately with the error
+			return nil, txErr
 		}
 		sumOfParticipantShares += *user.Amount
 	}
-
-	// Basic check: Sum of participant shares should ideally match total amount
-	// You might need more sophisticated logic for rounding or small discrepancies
 	if sumOfParticipantShares != req.TotalAmount {
 		txErr = errors.New("katılımcı tutarları toplamı genel tutar ile eşleşmiyor")
 		return nil, txErr
 	}
-	// --- End of nil pointer dereference fix and sum validation ---
 
-	// Insert participants
+	// 4. Katılımcıları ekle
+	stmt, txErr := tx.PrepareContext(ctx, `
+		INSERT INTO group_expense_participants (expense_id, user_id, amount_share, payment_status)
+		VALUES (?, ?, ?, ?)
+	`)
+	if txErr != nil {
+		return nil, errors.New("katılımcı ekleme sorgusu hazırlanamadı: " + txErr.Error())
+	}
+	defer stmt.Close()
+
 	for _, user := range req.Users {
-		paymentStatus := "unpaid"
+		status := "unpaid"
 		if user.UserID == payerID {
-			paymentStatus = "paid"
+			status = "paid"
 		}
-
-		_, txErr = stmt.ExecContext(ctx, expenseID, user.UserID, *user.Amount, paymentStatus) // user.Amount is now guaranteed not to be nil
+		_, txErr = stmt.ExecContext(ctx, expenseID, user.UserID, *user.Amount, status)
 		if txErr != nil {
 			return nil, errors.New("katılımcı eklenemedi: " + txErr.Error())
 		}
 	}
 
-	// Query the updated group data
+	// 5. Oluşturulan tek harcamayı getir
 	row := tx.QueryRowContext(ctx, `
-        SELECT
-          g.id AS group_id,
-          g.group_name,
-          UNIX_TIMESTAMP(g.created_at) AS created_ts,
-          u.id AS creator_id,
-          u.fullname AS creator_name,
-          u.email AS creator_email,
-          (
-            SELECT JSON_ARRAYAGG(JSON_OBJECT(
-              'id', gm_user.id,
-              'fullname', gm_user.fullname,
-              'email', gm_user.email
-            ))
-            FROM group_members gm
-            JOIN users gm_user ON gm.user_id = gm_user.id
-            WHERE gm.group_id = g.id
-          ) AS members,
-          (
-            SELECT JSON_ARRAYAGG(JSON_OBJECT(
-              'request_id', r.request_id,
-              'user_id', r.user_id,
-              'fullname', ru.fullname,
-              'email', ru.email,
-              'requested_at', UNIX_TIMESTAMP(r.requested_at),
-              'request_status', r.request_status,
-              'group_name', gr.group_name,
-              'group_id', gr.id
-            ))
-            FROM group_add_requests r
-            JOIN users ru ON r.user_id = ru.id
-            JOIN groups gr ON r.group_id = gr.id
-            WHERE r.group_id = g.id AND r.request_status = 'pending'
-          ) AS pending_requests,
-          (
-            SELECT JSON_ARRAYAGG(JSON_OBJECT(
-              'expense_id', e.expense_id,
-              'payer_id', e.payer_id,
-              'payer_name', p.fullname,
-              'amount', e.amount,
-              'description_note', e.description_note,
-              'payment_title', e.payment_title,
-              'payment_date', UNIX_TIMESTAMP(e.payment_date),
-              'bill_image_url', e.bill_image_url,
-              'participants', (
-                SELECT JSON_ARRAYAGG(JSON_OBJECT(
-                  'user_id', ep.user_id,
-                  'user_name', up.fullname,
-                  'amount_share', ep.amount_share,
-                  'payment_status', ep.payment_status
-                ))
-                FROM group_expense_participants ep
-                LEFT JOIN users up ON ep.user_id = up.id
-                WHERE ep.expense_id = e.expense_id
-              )
-            ))
-            FROM group_expenses e
-            LEFT JOIN users p ON e.payer_id = p.id
-            WHERE e.group_id = g.id
-            ORDER BY e.payment_date DESC
-          ) AS expenses
-        FROM groups g
-        JOIN users u ON g.creator_id = u.id
-        WHERE g.id = ?
-    `, req.GroupID)
+		SELECT
+			e.expense_id,
+			e.group_id,
+			e.payer_id,
+			p.fullname AS payer_name,
+			e.amount,
+			e.description_note,
+			e.payment_title,
+			e.payment_date,
+			e.bill_image_url,
+			(
+				SELECT JSON_ARRAYAGG(JSON_OBJECT(
+					'user_id', ep.user_id,
+					'user_name', u.fullname,
+					'amount_share', ep.amount_share,
+					'payment_status', ep.payment_status
+				))
+				FROM group_expense_participants ep
+				LEFT JOIN users u ON ep.user_id = u.id
+				WHERE ep.expense_id = e.expense_id
+			) AS participants
+		FROM group_expenses e
+		LEFT JOIN users p ON e.payer_id = p.id
+		WHERE e.expense_id = ?
+	`, expenseID)
 
 	return row, nil
 }

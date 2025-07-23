@@ -625,7 +625,6 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 		}
 		defer r.Body.Close()
 
-		// Validasyonları iyileştir
 		if req.TotalAmount <= 0 {
 			http.Error(w, "Tutar 0'dan büyük olmalıdır", http.StatusBadRequest)
 			return
@@ -639,102 +638,59 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 			return
 		}
 
-		// Group expense'i oluştur ve güncel grup verisini al
-		row, err := repo.createGroupExpenseAndReturnGroupRow(r.Context(), userUID, req)
+		// Yeni harcamayı döndür
+		row, err := repo.createGroupExpense(r.Context(), userUID, req)
 		if err != nil {
-			// Özel hata mesajları
-			if strings.Contains(err.Error(), "katılımcı tutarları toplamı") {
-				http.Error(w, "Katılımcı tutarları toplamı genel tutar ile eşleşmiyor", http.StatusBadRequest)
-				return
-			}
-			// Catch our specific error for nil amounts
-			if strings.Contains(err.Error(), "participant amount cannot be null") {
-				http.Error(w, "Katılımcı tutarı boş olamaz", http.StatusBadRequest)
-				return
-			}
 			http.Error(w, "Harcama oluşturulamadı: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		// Scan işlemi için geçici değişkenler
 		var (
-			groupID, groupName, creatorID, creatorName, creatorEmail string
-			createdTs                                                int64
-			membersJSON, pendingRequestsJSON, expensesJSON           sql.NullString
+			expenseID, title, note, creatorID, billImageURL string
+			createdAt                                       int64
+			totalAmount                                     float64
+			usersJSON                                       sql.NullString
 		)
 
-		// Row'dan verileri scan et
 		if err := row.Scan(
-			&groupID,
-			&groupName,
-			&createdTs,
+			&expenseID,
+			&title,
+			&note,
 			&creatorID,
-			&creatorName,
-			&creatorEmail,
-			&membersJSON,
-			&pendingRequestsJSON,
-			&expensesJSON,
+			&totalAmount,
+			&billImageURL,
+			&createdAt,
+			&usersJSON,
 		); err != nil {
-			if err == sql.ErrNoRows {
-				http.Error(w, "Grup bulunamadı (veritabanı tutarsızlığı olabilir)", http.StatusNotFound)
-				return
-			}
-			http.Error(w, "Grup verisi işlenemedi: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "Harcama verisi çözümlenemedi: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		// JSON verilerini parse et
-		var (
-			members         json.RawMessage // Use json.RawMessage to keep original JSON structure or decode into specific structs
-			pendingRequests json.RawMessage
-			expenses        json.RawMessage
-		)
-
-		// Members JSON'ını parse et
-		// Check .Valid first to avoid dereferencing NullString's String field if it's not valid
-		if membersJSON.Valid && membersJSON.String != "null" {
-			members = json.RawMessage(membersJSON.String)
-
+		// JSON verisi (kullanıcılar)
+		var users json.RawMessage
+		if usersJSON.Valid && usersJSON.String != "null" {
+			users = json.RawMessage(usersJSON.String)
 		} else {
-			members = json.RawMessage("[]") // Default to empty array if null or invalid
+			users = json.RawMessage("[]")
 		}
 
-		// Pending requests JSON'ını parse et
-		if pendingRequestsJSON.Valid && pendingRequestsJSON.String != "null" {
-			pendingRequests = json.RawMessage(pendingRequestsJSON.String)
-
-		} else {
-			pendingRequests = json.RawMessage("[]")
+		// Harcama nesnesini oluştur
+		expense := map[string]interface{}{
+			"expense_id":     expenseID,
+			"payment_title":  title,
+			"note":           note,
+			"creator_id":     creatorID,
+			"total_amount":   totalAmount,
+			"bill_image_url": billImageURL,
+			"created_ts":     createdAt,
+			"users":          users,
 		}
 
-		// Expenses JSON'ını parse et
-		if expensesJSON.Valid && expensesJSON.String != "null" {
-			expenses = json.RawMessage(expensesJSON.String)
-
-		} else {
-			expenses = json.RawMessage("[]")
-		}
-
-		// Response data'sını oluştur
-		groupData := map[string]interface{}{
-			"group_id":         groupID,
-			"group_name":       groupName,
-			"created_ts":       createdTs,
-			"creator_id":       creatorID,
-			"creator_name":     creatorName,
-			"creator_email":    creatorEmail,
-			"members":          members,         // json.RawMessage will be directly embedded
-			"pending_requests": pendingRequests, // json.RawMessage will be directly embedded
-			"expenses":         expenses,        // json.RawMessage will be directly embedded
-		}
-
-		// Başarılı response döndür
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(groupData); err != nil {
-			// Bu noktada header zaten gönderildi, log'a yazmak en iyisi
-			// log.Printf("Error encoding response: %v", err) // Use your logging framework
-			return
+
+		if err := json.NewEncoder(w).Encode(expense); err != nil {
+			return // yazılamadı, loglanabilir
 		}
 	}
 }
