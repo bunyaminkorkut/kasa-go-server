@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"time"
 )
 
 type KasaRepository struct {
@@ -362,7 +361,7 @@ type ExpenseWithParticipants struct {
 	Amount          float64         `json:"amount"`
 	DescriptionNote string          `json:"description_note"`
 	PaymentTitle    string          `json:"payment_title"`
-	PaymentDate     time.Time       `json:"payment_date"`
+	PaymentDate     int64           `json:"payment_date"`
 	BillImageURL    string          `json:"bill_image_url"`
 	Participants    json.RawMessage `json:"participants"`
 }
@@ -431,18 +430,12 @@ func (repo *KasaRepository) createGroupExpense(ctx context.Context, payerID stri
 
 	var expense ExpenseWithParticipants
 	var participantsRaw sql.NullString
+	var paymentDateUnix int64 // 👈 Eksik olan tanım buraya eklendi
 
 	txErr = tx.QueryRowContext(ctx, `
 		SELECT
-			e.expense_id,
-			e.group_id,
-			e.payer_id,
-			u.fullname AS payer_name,
-			e.amount,
-			e.description_note,
-			e.payment_title,
-			UNIX_TIMESTAMP(e.payment_date) AS payment_date,
-			e.bill_image_url,
+			e.expense_id, e.group_id, e.payer_id, u.fullname AS payer_name,
+			e.amount, e.description_note, e.payment_title, UNIX_TIMESTAMP(e.payment_date), e.bill_image_url,
 			(
 				SELECT JSON_ARRAYAGG(JSON_OBJECT(
 					'user_id', ep.user_id,
@@ -456,7 +449,7 @@ func (repo *KasaRepository) createGroupExpense(ctx context.Context, payerID stri
 			) AS participants
 		FROM group_expenses e
 		LEFT JOIN users u ON u.id = e.payer_id
-		WHERE e.expense_id = ?;
+		WHERE e.expense_id = ?
 	`, expenseID).Scan(
 		&expense.ExpenseID,
 		&expense.GroupID,
@@ -465,13 +458,15 @@ func (repo *KasaRepository) createGroupExpense(ctx context.Context, payerID stri
 		&expense.Amount,
 		&expense.DescriptionNote,
 		&expense.PaymentTitle,
-		&expense.PaymentDate,
+		&paymentDateUnix, // 👈 Unix timestamp olarak al
 		&expense.BillImageURL,
 		&participantsRaw,
 	)
 	if txErr != nil {
 		return nil, fmt.Errorf("expense okunamadı: %w", txErr)
 	}
+
+	expense.PaymentDate = paymentDateUnix // 👈 Burada `int64` olarak ata
 
 	if participantsRaw.Valid {
 		expense.Participants = json.RawMessage(participantsRaw.String)
