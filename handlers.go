@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -641,33 +640,6 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 		}
 
 		// Group expense'i oluştur ve güncel grup verisini al
-		allHaveAmount := true
-		for _, user := range req.Users {
-			if user.Amount == nil {
-				allHaveAmount = false
-				break
-			}
-		}
-
-		if !allHaveAmount {
-			// Amount olmayanlar varsa, toplam tutarı eşit paylaştır
-			count := float64(len(req.Users))
-			equalShare := req.TotalAmount / count
-			for i := range req.Users {
-				req.Users[i].Amount = &equalShare
-			}
-		} else {
-			// Eğer tüm Amount değerleri doluysa, toplamı kontrol et
-			var sum float64
-			for _, user := range req.Users {
-				sum += *user.Amount
-			}
-			// Eğer toplam tutar ile eşleşmiyorsa hata dönebilirsin
-			if int(sum*100) != int(req.TotalAmount*100) { // küçük yuvarlama farklarına karşı
-				return nil, errors.New("katılımcı tutarları toplamı genel tutar ile eşleşmiyor")
-			}
-		}
-
 		row, err := repo.createGroupExpenseAndReturnGroupRow(r.Context(), userUID, req)
 		if err != nil {
 			// Özel hata mesajları
@@ -722,6 +694,7 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 		// Check .Valid first to avoid dereferencing NullString's String field if it's not valid
 		if membersJSON.Valid && membersJSON.String != "null" {
 			members = json.RawMessage(membersJSON.String)
+
 		} else {
 			members = json.RawMessage("[]") // Default to empty array if null or invalid
 		}
@@ -729,6 +702,7 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 		// Pending requests JSON'ını parse et
 		if pendingRequestsJSON.Valid && pendingRequestsJSON.String != "null" {
 			pendingRequests = json.RawMessage(pendingRequestsJSON.String)
+
 		} else {
 			pendingRequests = json.RawMessage("[]")
 		}
@@ -736,6 +710,7 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 		// Expenses JSON'ını parse et
 		if expensesJSON.Valid && expensesJSON.String != "null" {
 			expenses = json.RawMessage(expensesJSON.String)
+
 		} else {
 			expenses = json.RawMessage("[]")
 		}
