@@ -38,29 +38,22 @@ CREATE TABLE IF NOT EXISTS group_add_requests (
 CREATE TABLE IF NOT EXISTS group_expenses (
     expense_id INT AUTO_INCREMENT PRIMARY KEY,
     group_id INT NOT NULL,
-    user_id VARCHAR(100) NOT NULL,
-    amount DECIMAL(10, 2) NOT NULL,
-    description VARCHAR(255),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
-CREATE TABLE IF NOT EXISTS group_expense_splits (
-    expense_id INT NOT NULL,
-    user_id VARCHAR(100) NOT NULL,
-    amount DECIMAL(10, 2),
-    PRIMARY KEY (expense_id, user_id),
-    FOREIGN KEY (expense_id) REFERENCES group_expenses(expense_id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
-CREATE TABLE IF NOT EXISTS group_expense_payments (
-    payment_id INT AUTO_INCREMENT PRIMARY KEY,
-    expense_id INT NOT NULL,
     payer_id VARCHAR(100) NOT NULL,
     amount DECIMAL(10, 2) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (expense_id) REFERENCES group_expenses(expense_id) ON DELETE CASCADE,
+    description_note TEXT,
+    payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    payment_title VARCHAR(255) NOT NULL,
+    bill_image_url VARCHAR(255) NULL,
+    FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
     FOREIGN KEY (payer_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS group_expense_participants (
+    expense_id INT NOT NULL,
+    user_id VARCHAR(100) NOT NULL,
+    amount_share DECIMAL(10, 2),
+    payment_status ENUM('paid', 'unpaid') DEFAULT 'unpaid',
+    PRIMARY KEY (expense_id, user_id),
+    FOREIGN KEY (expense_id) REFERENCES group_expenses(expense_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
