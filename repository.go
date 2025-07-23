@@ -82,36 +82,33 @@ func (repo *KasaRepository) getMyGroups(userID string) (*sql.Rows, error) {
 			) AS pending_requests,
 
 			(
-				SELECT JSON_ARRAYAGG(expense_obj)
-				FROM (
-					SELECT
-						JSON_OBJECT(
-							'expense_id', e.expense_id,
-							'group_id', e.group_id,
-							'amount', e.amount,
-							'description_note', e.description_note,
-							'payment_date', UNIX_TIMESTAMP(e.payment_date),
-							'payment_title', e.payment_title,
-							'bill_image_url', e.bill_image_url,
-							'payer_id', e.payer_id,
-							'participants', (
-								SELECT JSON_ARRAYAGG(
-									JSON_OBJECT(
-										'user_id', p.user_id,
-										'amount_share', p.amount_share,
-										'payment_status', p.payment_status
-									)
+				SELECT JSON_ARRAYAGG(
+					JSON_OBJECT(
+						'expense_id', e.expense_id,
+						'group_id', e.group_id,
+						'amount', e.amount,
+						'description_note', e.description_note,
+						'payment_date', UNIX_TIMESTAMP(e.payment_date),
+						'payment_title', e.payment_title,
+						'bill_image_url', e.bill_image_url,
+						'payer_id', e.payer_id,
+						'participants', (
+							SELECT JSON_ARRAYAGG(
+								JSON_OBJECT(
+									'user_id', p.user_id,
+									'amount_share', p.amount_share,
+									'payment_status', p.payment_status
 								)
-								FROM group_expense_participants p
-								WHERE p.expense_id = e.expense_id
 							)
-						) AS expense_obj
-					FROM group_expenses e
-					WHERE e.group_id = g.id
-					ORDER BY e.payment_date DESC
-				) AS sorted_expenses
+							FROM group_expense_participants p
+							WHERE p.expense_id = e.expense_id
+						)
+					)
+				)
+				FROM group_expenses e
+				WHERE e.group_id = g.id
+				ORDER BY e.payment_date DESC
 			) AS expenses
-
 		FROM groups g
 		JOIN users u ON g.creator_id = u.id
 		JOIN group_members gm ON g.id = gm.group_id
@@ -194,38 +191,34 @@ func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail, curre
 				JOIN groups gr ON r.group_id = gr.id 
 				WHERE r.group_id = g.id AND r.request_status = 'pending'
 			) AS pending_requests,
+
 			(
-				SELECT JSON_ARRAYAGG(expense_obj)
-				FROM (
-					SELECT
-						JSON_OBJECT(
-							'expense_id', e.expense_id,
-							'group_id', e.group_id,
-							'amount', e.amount,
-							'description_note', e.description_note,
-							'payment_date', UNIX_TIMESTAMP(e.payment_date),
-							'payment_title', e.payment_title,
-							'bill_image_url', e.bill_image_url,
-							'payer_id', e.payer_id,
-							'participants', (
-								SELECT JSON_ARRAYAGG(
-									JSON_OBJECT(
-										'user_id', p.user_id,
-										'amount_share', p.amount_share,
-										'payment_status', p.payment_status
-									)
+				SELECT JSON_ARRAYAGG(
+					JSON_OBJECT(
+						'expense_id', e.expense_id,
+						'group_id', e.group_id,
+						'amount', e.amount,
+						'description_note', e.description_note,
+						'payment_date', UNIX_TIMESTAMP(e.payment_date),
+						'payment_title', e.payment_title,
+						'bill_image_url', e.bill_image_url,
+						'payer_id', e.payer_id,
+						'participants', (
+							SELECT JSON_ARRAYAGG(
+								JSON_OBJECT(
+									'user_id', p.user_id,
+									'amount_share', p.amount_share,
+									'payment_status', p.payment_status
 								)
-								FROM group_expense_participants p
-								WHERE p.expense_id = e.expense_id
 							)
-						) AS expense_obj
-					FROM group_expenses e
-					WHERE e.group_id = g.id
-					ORDER BY e.payment_date DESC
-				) AS sorted_expenses
-			) AS expenses
+							FROM group_expense_participants p
+							WHERE p.expense_id = e.expense_id
+						)
+					)
+				)
 				FROM group_expenses e
 				WHERE e.group_id = g.id
+				ORDER BY e.payment_date DESC
 			) AS expenses
 		FROM groups g
 		JOIN users u ON g.creator_id = u.id
