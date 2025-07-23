@@ -193,29 +193,29 @@ func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail, curre
 			) AS pending_requests,
 
 			(
-				SELECT JSON_ARRAYAGG(JSON_OBJECT(
-					'expense_id', e.expense_id,
-					'payer_id', e.payer_id,
-					'payer_name', p.fullname,
-					'amount', e.amount,
-					'description_note', e.description_note,
-					'payment_title', e.payment_title,
-					'payment_date', UNIX_TIMESTAMP(e.payment_date),
-					'bill_image_url', e.bill_image_url,
-					'participants', (
-						SELECT JSON_ARRAYAGG(JSON_OBJECT(
-							'user_id', ep.user_id,
-							'user_name', up.fullname,
-							'amount_share', ep.amount_share,
-							'payment_status', ep.payment_status
-						))
-						FROM group_expense_participants ep
-						LEFT JOIN users up ON ep.user_id = up.id
-						WHERE ep.expense_id = e.expense_id
+				SELECT JSON_ARRAYAGG(
+					JSON_OBJECT(
+						'expense_id', e.expense_id,
+						'amount', e.amount,
+						'description_note', e.description_note,
+						'payment_date', UNIX_TIMESTAMP(e.payment_date),
+						'payment_title', e.payment_title,
+						'bill_image_url', e.bill_image_url,
+						'payer_id', e.payer_id,
+						'participants', (
+							SELECT JSON_ARRAYAGG(
+								JSON_OBJECT(
+									'user_id', p.user_id,
+									'amount_share', p.amount_share,
+									'payment_status', p.payment_status
+								)
+							)
+							FROM group_expense_participants p
+							WHERE p.expense_id = e.expense_id
+						)
 					)
-				))
+				)
 				FROM group_expenses e
-				LEFT JOIN users p ON e.payer_id = p.id
 				WHERE e.group_id = g.id
 			) AS expenses
 
