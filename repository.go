@@ -97,11 +97,13 @@ func (repo *KasaRepository) getMyGroups(userID string) (*sql.Rows, error) {
 							SELECT JSON_ARRAYAGG(
 								JSON_OBJECT(
 									'user_id', p.user_id,
+									'user_name', u.fullname,      -- fullname eklendi
 									'amount_share', p.amount_share,
 									'payment_status', p.payment_status
 								)
 							)
 							FROM group_expense_participants p
+							JOIN users u ON p.user_id = u.id       -- join users ile
 							WHERE p.expense_id = e.expense_id
 						)
 					)
@@ -210,11 +212,13 @@ func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail, curre
 							SELECT JSON_ARRAYAGG(
 								JSON_OBJECT(
 									'user_id', p.user_id,
+									'user_name', u.fullname,      -- fullname eklendi
 									'amount_share', p.amount_share,
 									'payment_status', p.payment_status
 								)
 							)
 							FROM group_expense_participants p
+							JOIN users u ON p.user_id = u.id       -- join users ile
 							WHERE p.expense_id = e.expense_id
 						)
 					)
