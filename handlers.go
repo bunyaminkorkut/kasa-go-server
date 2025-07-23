@@ -620,24 +620,40 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 		}
 		defer r.Body.Close()
 
-		if req.TotalAmount <= 0 || len(req.Users) == 0 || strings.TrimSpace(req.PaymentTitle) == "" {
-			http.Error(w, "Eksik veya hatalı veri", http.StatusBadRequest)
+		// Validasyonları iyileştir
+		if req.TotalAmount <= 0 {
+			http.Error(w, "Tutar 0'dan büyük olmalıdır", http.StatusBadRequest)
+			return
+		}
+		if len(req.Users) == 0 {
+			http.Error(w, "En az bir katılımcı seçilmelidir", http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(req.PaymentTitle) == "" {
+			http.Error(w, "Harcama başlığı boş olamaz", http.StatusBadRequest)
 			return
 		}
 
+		// Grup expense'i oluştur ve güncel grup verisini al
 		row, err := repo.createGroupExpenseAndReturnGroupRow(userUID.(string), req)
 		if err != nil {
+			// Özel hata mesajları
+			if strings.Contains(err.Error(), "katılımcı tutarları toplamı") {
+				http.Error(w, "Katılımcı tutarları toplamı genel tutar ile eşleşmiyor", http.StatusBadRequest)
+				return
+			}
 			http.Error(w, "Harcama oluşturulamadı: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		// Geçici değişkenler
+		// Scan işlemi için geçici değişkenler
 		var (
 			groupID, groupName, creatorID, creatorName, creatorEmail string
 			createdTs                                                int64
 			membersJSON, pendingRequestsJSON, expensesJSON           sql.NullString
 		)
 
+		// Row'dan verileri scan et
 		if err := row.Scan(
 			&groupID,
 			&groupName,
@@ -649,26 +665,50 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 			&pendingRequestsJSON,
 			&expensesJSON,
 		); err != nil {
+			if err == sql.ErrNoRows {
+				http.Error(w, "Grup bulunamadı", http.StatusNotFound)
+				return
+			}
 			http.Error(w, "Veri işlenemedi: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
+		// JSON verilerini parse et
 		var (
-			members         any
-			pendingRequests any
-			expenses        any
+			members         []interface{}
+			pendingRequests []interface{}
+			expenses        []interface{}
 		)
 
-		if membersJSON.Valid {
-			_ = json.Unmarshal([]byte(membersJSON.String), &members)
-		}
-		if pendingRequestsJSON.Valid {
-			_ = json.Unmarshal([]byte(pendingRequestsJSON.String), &pendingRequests)
-		}
-		if expensesJSON.Valid {
-			_ = json.Unmarshal([]byte(expensesJSON.String), &expenses)
+		// Members JSON'ını parse et
+		if membersJSON.Valid && membersJSON.String != "null" {
+			if err := json.Unmarshal([]byte(membersJSON.String), &members); err != nil {
+				// Parse hatası durumunda boş array kullan
+				members = []interface{}{}
+			}
+		} else {
+			members = []interface{}{}
 		}
 
+		// Pending requests JSON'ını parse et
+		if pendingRequestsJSON.Valid && pendingRequestsJSON.String != "null" {
+			if err := json.Unmarshal([]byte(pendingRequestsJSON.String), &pendingRequests); err != nil {
+				pendingRequests = []interface{}{}
+			}
+		} else {
+			pendingRequests = []interface{}{}
+		}
+
+		// Expenses JSON'ını parse et
+		if expensesJSON.Valid && expensesJSON.String != "null" {
+			if err := json.Unmarshal([]byte(expensesJSON.String), &expenses); err != nil {
+				expenses = []interface{}{}
+			}
+		} else {
+			expenses = []interface{}{}
+		}
+
+		// Response data'sını oluştur
 		groupData := map[string]interface{}{
 			"group_id":         groupID,
 			"group_name":       groupName,
@@ -681,8 +721,13 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 			"expenses":         expenses,
 		}
 
+		// Başarılı response döndür
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(groupData)
+		if err := json.NewEncoder(w).Encode(groupData); err != nil {
+			// Bu noktada header zaten gönderildi, log'a yazmak en iyisi
+			// Log framework'ünüz varsa burada kullanın
+			return
+		}
 	}
 }
