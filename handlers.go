@@ -625,15 +625,64 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 			return
 		}
 
-		err := repo.createGroupExpense(userUID.(string), req)
+		row, err := repo.createGroupExpenseAndReturnGroupRow(userUID.(string), req)
 		if err != nil {
 			http.Error(w, "Harcama oluşturulamadı: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
+		// Geçici değişkenler
+		var (
+			groupID, groupName, creatorID, creatorName, creatorEmail string
+			createdTs                                                int64
+			membersJSON, pendingRequestsJSON, expensesJSON           sql.NullString
+		)
+
+		if err := row.Scan(
+			&groupID,
+			&groupName,
+			&createdTs,
+			&creatorID,
+			&creatorName,
+			&creatorEmail,
+			&membersJSON,
+			&pendingRequestsJSON,
+			&expensesJSON,
+		); err != nil {
+			http.Error(w, "Veri işlenemedi: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		var (
+			members         any
+			pendingRequests any
+			expenses        any
+		)
+
+		if membersJSON.Valid {
+			_ = json.Unmarshal([]byte(membersJSON.String), &members)
+		}
+		if pendingRequestsJSON.Valid {
+			_ = json.Unmarshal([]byte(pendingRequestsJSON.String), &pendingRequests)
+		}
+		if expensesJSON.Valid {
+			_ = json.Unmarshal([]byte(expensesJSON.String), &expenses)
+		}
+
+		groupData := map[string]interface{}{
+			"group_id":         groupID,
+			"group_name":       groupName,
+			"created_ts":       createdTs,
+			"creator_id":       creatorID,
+			"creator_name":     creatorName,
+			"creator_email":    creatorEmail,
+			"members":          members,
+			"pending_requests": pendingRequests,
+			"expenses":         expenses,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"message": "Harcama başarıyla oluşturuldu",
-		})
+		json.NewEncoder(w).Encode(groupData)
 	}
 }

@@ -350,10 +350,10 @@ func (repo *KasaRepository) rejectAddRequest(requestID int64, userID string) err
 	return nil
 }
 
-func (repo *KasaRepository) createGroupExpense(payerID string, req CreateExpenseRequest) error {
+func (repo *KasaRepository) createGroupExpenseAndReturnGroupRow(payerID string, req CreateExpenseRequest) (*sql.Row, error) {
 	tx, err := repo.DB.Begin()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer func() {
 		if err != nil {
@@ -364,16 +364,17 @@ func (repo *KasaRepository) createGroupExpense(payerID string, req CreateExpense
 	}()
 
 	result, err := tx.Exec(
-		"INSERT INTO group_expenses (group_id, payer_id, amount, description_note, payment_title, bill_image_url) VALUES (?, ?, ?, ?, ?, ?)",
+		`INSERT INTO group_expenses (group_id, payer_id, amount, description_note, payment_title, bill_image_url, payment_date)
+		 VALUES (?, ?, ?, ?, ?, ?, NOW())`,
 		req.GroupID, payerID, req.TotalAmount, req.Note, req.PaymentTitle, req.BillImageURL,
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	expenseID, err := result.LastInsertId()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var shareAmounts []float64
@@ -388,12 +389,12 @@ func (repo *KasaRepository) createGroupExpense(payerID string, req CreateExpense
 	}
 
 	if allHaveAmount {
-		var sum float64 = 0
+		var sum float64
 		for _, amount := range shareAmounts {
 			sum += amount
 		}
 		if int(sum*100) != int(req.TotalAmount*100) {
-			return errors.New("Katılımcı tutarları toplamı total_amount ile eşleşmiyor")
+			return nil, errors.New("katılımcı tutarları toplamı total_amount ile eşleşmiyor")
 		}
 	} else {
 		count := float64(len(req.Users))
@@ -405,7 +406,7 @@ func (repo *KasaRepository) createGroupExpense(payerID string, req CreateExpense
 
 	stmt, err := tx.Prepare("INSERT INTO group_expense_participants (expense_id, user_id, amount_share, payment_status) VALUES (?, ?, ?, ?)")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer stmt.Close()
 
@@ -417,9 +418,79 @@ func (repo *KasaRepository) createGroupExpense(payerID string, req CreateExpense
 
 		_, err := stmt.Exec(expenseID, user.UserID, *user.Amount, paymentStatus)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
-	return nil
+	// Gider oluşturulduktan sonra grubu tüm ilişkili verilerle birlikte getir
+	row := repo.DB.QueryRow(`
+		SELECT 
+			g.id AS group_id,
+			g.group_name,
+			UNIX_TIMESTAMP(g.created_at) AS created_ts,
+			u.id AS creator_id,
+			u.fullname AS creator_name,
+			u.email AS creator_email,
+
+			(
+				SELECT JSON_ARRAYAGG(JSON_OBJECT(
+					'id', gm_user.id,
+					'fullname', gm_user.fullname,
+					'email', gm_user.email
+				))
+				FROM group_members gm
+				JOIN users gm_user ON gm.user_id = gm_user.id
+				WHERE gm.group_id = g.id
+			) AS members,
+
+			(
+				SELECT JSON_ARRAYAGG(JSON_OBJECT(
+					'request_id', r.request_id,
+					'user_id', r.user_id,
+					'fullname', ru.fullname,
+					'email', ru.email,
+					'requested_at', UNIX_TIMESTAMP(r.requested_at),
+					'request_status', r.request_status,
+					'group_name', gr.group_name,
+					'group_id', gr.id
+				))
+				FROM group_add_requests r
+				JOIN users ru ON r.user_id = ru.id
+				JOIN groups gr ON r.group_id = gr.id 
+				WHERE r.group_id = g.id AND r.request_status = 'pending'
+			) AS pending_requests,
+
+			(
+				SELECT JSON_ARRAYAGG(JSON_OBJECT(
+					'expense_id', e.expense_id,
+					'payer_id', e.payer_id,
+					'payer_name', p.fullname,
+					'amount', e.amount,
+					'description_note', e.description_note,
+					'payment_title', e.payment_title,
+					'payment_date', UNIX_TIMESTAMP(e.payment_date),
+					'bill_image_url', e.bill_image_url,
+					'participants', (
+						SELECT JSON_ARRAYAGG(JSON_OBJECT(
+							'user_id', ep.user_id,
+							'user_name', up.fullname,
+							'amount_share', ep.amount_share,
+							'payment_status', ep.payment_status
+						))
+						FROM group_expense_participants ep
+						LEFT JOIN users up ON ep.user_id = up.id
+						WHERE ep.expense_id = e.expense_id
+					)
+				))
+				FROM group_expenses e
+				LEFT JOIN users p ON e.payer_id = p.id
+				WHERE e.group_id = g.id
+			) AS expenses
+
+		FROM groups g
+		JOIN users u ON g.creator_id = u.id
+		WHERE g.id = ?
+	`, req.GroupID)
+
+	return row, nil
 }
