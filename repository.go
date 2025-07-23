@@ -92,6 +92,7 @@ func (repo *KasaRepository) getMyGroups(userID string) (*sql.Rows, error) {
 						'payment_title', e.payment_title,
 						'bill_image_url', e.bill_image_url,
 						'payer_id', e.payer_id,
+						'payer_name', pu.fullname,  -- burası eklendi
 						'participants', (
 							SELECT JSON_ARRAYAGG(
 								JSON_OBJECT(
@@ -106,6 +107,7 @@ func (repo *KasaRepository) getMyGroups(userID string) (*sql.Rows, error) {
 					)
 				)
 				FROM group_expenses e
+				LEFT JOIN users pu ON pu.id = e.payer_id  -- payer'ın ismini almak için join
 				WHERE e.group_id = g.id
 				ORDER BY e.payment_date ASC
 			) AS expenses
@@ -203,6 +205,7 @@ func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail, curre
 						'payment_title', e.payment_title,
 						'bill_image_url', e.bill_image_url,
 						'payer_id', e.payer_id,
+						'payer_name', pu.fullname,  -- burası eklendi
 						'participants', (
 							SELECT JSON_ARRAYAGG(
 								JSON_OBJECT(
@@ -217,6 +220,7 @@ func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail, curre
 					)
 				)
 				FROM group_expenses e
+				LEFT JOIN users pu ON pu.id = e.payer_id  -- payer'ın ismini almak için join
 				WHERE e.group_id = g.id
 				ORDER BY e.payment_date ASC
 			) AS expenses
