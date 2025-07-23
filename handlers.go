@@ -565,3 +565,55 @@ func handleRejectAddRequest(repo *KasaRepository) http.HandlerFunc {
 		json.NewEncoder(w).Encode(requests)
 	}
 }
+
+type ExpenseUser struct {
+	UserID string   `json:"user_id"`
+	Amount *float64 `json:"amount"`
+}
+
+type CreateExpenseRequest struct {
+	GroupID      int           `json:"group_id"`
+	TotalAmount  float64       `json:"total_amount"`
+	Note         string        `json:"note"`
+	PaymentTitle string        `json:"payment_title"`
+	Users        []ExpenseUser `json:"users"`
+	BillImageURL string        `json:"bill_image_url"` // optional
+}
+
+func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Sadece POST desteklenir", http.StatusMethodNotAllowed)
+			return
+		}
+
+		userUID := r.Context().Value("userUID")
+		if userUID == nil {
+			http.Error(w, "Yetkisiz erişim", http.StatusUnauthorized)
+			return
+		}
+
+		var req CreateExpenseRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Geçersiz JSON", http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+
+		if req.TotalAmount <= 0 || len(req.Users) == 0 || strings.TrimSpace(req.PaymentTitle) == "" {
+			http.Error(w, "Eksik veya hatalı veri", http.StatusBadRequest)
+			return
+		}
+
+		err := repo.createGroupExpense(userUID.(string), req)
+		if err != nil {
+			http.Error(w, "Harcama oluşturulamadı: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"message": "Harcama başarıyla oluşturuldu",
+		})
+	}
+}

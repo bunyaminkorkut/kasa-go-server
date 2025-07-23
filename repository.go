@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 )
@@ -291,6 +292,77 @@ func (repo *KasaRepository) rejectAddRequest(requestID int64, userID string) err
 	if err != nil {
 		log.Println("Transaction commit edilemedi:", err)
 		return err
+	}
+
+	return nil
+}
+
+func (repo *KasaRepository) createGroupExpense(payerID string, req CreateExpenseRequest) error {
+	tx, err := repo.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		} else {
+			tx.Commit()
+		}
+	}()
+
+	result, err := tx.Exec(
+		"INSERT INTO group_expenses (group_id, payer_id, amount, description_note, payment_title, bill_image_url) VALUES (?, ?, ?, ?, ?, ?)",
+		req.GroupID, payerID, req.TotalAmount, req.Note, req.PaymentTitle, req.BillImageURL,
+	)
+	if err != nil {
+		return err
+	}
+
+	expenseID, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+
+	var shareAmounts []float64
+	var userIDs []string
+	allHaveAmount := true
+
+	for _, user := range req.Users {
+		if user.Amount == nil {
+			allHaveAmount = false
+			break
+		}
+		shareAmounts = append(shareAmounts, *user.Amount)
+		userIDs = append(userIDs, user.UserID)
+	}
+
+	if allHaveAmount {
+		var sum float64 = 0
+		for _, amount := range shareAmounts {
+			sum += amount
+		}
+		if int(sum*100) != int(req.TotalAmount*100) {
+			return errors.New("Katılımcı tutarları toplamı total_amount ile eşleşmiyor")
+		}
+	} else {
+		count := float64(len(req.Users))
+		share := req.TotalAmount / count
+		for i := range req.Users {
+			req.Users[i].Amount = &share
+		}
+	}
+
+	stmt, err := tx.Prepare("INSERT INTO group_expense_participants (expense_id, user_id, amount_share) VALUES (?, ?, ?)")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, user := range req.Users {
+		_, err := stmt.Exec(expenseID, user.UserID, *user.Amount)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
