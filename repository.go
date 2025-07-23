@@ -107,7 +107,7 @@ func (repo *KasaRepository) getMyGroups(userID string) (*sql.Rows, error) {
 				)
 				FROM group_expenses e
 				WHERE e.group_id = g.id
-				ORDER BY e.payment_date DESC
+				ORDER BY e.payment_date ASC
 			) AS expenses
 		FROM groups g
 		JOIN users u ON g.creator_id = u.id
@@ -218,7 +218,7 @@ func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail, curre
 				)
 				FROM group_expenses e
 				WHERE e.group_id = g.id
-				ORDER BY e.payment_date DESC
+				ORDER BY e.payment_date ASC
 			) AS expenses
 		FROM groups g
 		JOIN users u ON g.creator_id = u.id
