@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -640,6 +641,33 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 		}
 
 		// Group expense'i oluştur ve güncel grup verisini al
+		allHaveAmount := true
+		for _, user := range req.Users {
+			if user.Amount == nil {
+				allHaveAmount = false
+				break
+			}
+		}
+
+		if !allHaveAmount {
+			// Amount olmayanlar varsa, toplam tutarı eşit paylaştır
+			count := float64(len(req.Users))
+			equalShare := req.TotalAmount / count
+			for i := range req.Users {
+				req.Users[i].Amount = &equalShare
+			}
+		} else {
+			// Eğer tüm Amount değerleri doluysa, toplamı kontrol et
+			var sum float64
+			for _, user := range req.Users {
+				sum += *user.Amount
+			}
+			// Eğer toplam tutar ile eşleşmiyorsa hata dönebilirsin
+			if int(sum*100) != int(req.TotalAmount*100) { // küçük yuvarlama farklarına karşı
+				return nil, errors.New("katılımcı tutarları toplamı genel tutar ile eşleşmiyor")
+			}
+		}
+
 		row, err := repo.createGroupExpenseAndReturnGroupRow(r.Context(), userUID, req)
 		if err != nil {
 			// Özel hata mesajları
