@@ -486,17 +486,22 @@ func handleAcceptAddRequest(repo *KasaRepository) http.HandlerFunc {
 			var groupID int64
 			var groupName, creatorID, creatorName, creatorEmail string
 			var createdAt int64
-			var membersJSON, requestsJSON []byte
+			var membersJSON, requestsJSON, expensesJSON []byte
 
-			if err := groupRows.Scan(&groupID, &groupName, &createdAt, &creatorID, &creatorName, &creatorEmail, &membersJSON, &requestsJSON); err != nil {
+			if err := groupRows.Scan(
+				&groupID, &groupName, &createdAt,
+				&creatorID, &creatorName, &creatorEmail,
+				&membersJSON, &requestsJSON, &expensesJSON,
+			); err != nil {
 				log.Println("Satır okunamadı:", err)
 				http.Error(w, "Grup bilgileri alınamadı", http.StatusInternalServerError)
 				return
 			}
 
-			var members, requests []map[string]interface{}
+			var members, requests, expenses []map[string]interface{}
 			_ = json.Unmarshal(membersJSON, &members)
 			_ = json.Unmarshal(requestsJSON, &requests)
+			_ = json.Unmarshal(expensesJSON, &expenses)
 
 			groups = append(groups, map[string]interface{}{
 				"id":         groupID,
@@ -510,6 +515,7 @@ func handleAcceptAddRequest(repo *KasaRepository) http.HandlerFunc {
 				},
 				"members":          members,
 				"pending_requests": requests,
+				"expenses":         expenses,
 			})
 		}
 
