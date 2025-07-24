@@ -513,30 +513,27 @@ func (repo *KasaRepository) createGroupExpense(ctx context.Context, payerID stri
 		}
 	}
 
-	// Expense detaylarını oku (katılımcılar dahil)
 	var expense ExpenseWithParticipants
 	var participantsRaw sql.NullString
-	var paymentDateUnix int64
+	var paymentDateUnix int64 // 👈 Eksik olan tanım buraya eklendi
 
 	txErr = tx.QueryRowContext(ctx, `
 		SELECT
 			e.expense_id, e.group_id, e.payer_id, u.fullname AS payer_name,
 			e.amount, e.description_note, e.payment_title, UNIX_TIMESTAMP(e.payment_date), e.bill_image_url,
 			(
-				SELECT JSON_ARRAYAGG(
-					JSON_OBJECT(
-						'user_id', ep.user_id,
-						'user_name', uu.fullname,
-						'amount_share', ep.amount_share,
-						'payment_status', ep.payment_status
-					)
-				)
+				SELECT JSON_ARRAYAGG(JSON_OBJECT(
+					'user_id', ep.user_id,
+					'user_name', uu.fullname,
+					'amount_share', ep.amount_share,
+					'payment_status', ep.payment_status
+				))
 				FROM group_expense_participants ep
-				JOIN users uu ON uu.id = ep.user_id
+				LEFT JOIN users uu ON uu.id = ep.user_id
 				WHERE ep.expense_id = e.expense_id
 			) AS participants
 		FROM group_expenses e
-		JOIN users u ON u.id = e.payer_id
+		LEFT JOIN users u ON u.id = e.payer_id
 		WHERE e.expense_id = ?
 	`, expenseID).Scan(
 		&expense.ExpenseID,
@@ -546,7 +543,7 @@ func (repo *KasaRepository) createGroupExpense(ctx context.Context, payerID stri
 		&expense.Amount,
 		&expense.DescriptionNote,
 		&expense.PaymentTitle,
-		&paymentDateUnix,
+		&paymentDateUnix, // 👈 Unix timestamp olarak al
 		&expense.BillImageURL,
 		&participantsRaw,
 	)
@@ -554,7 +551,8 @@ func (repo *KasaRepository) createGroupExpense(ctx context.Context, payerID stri
 		return nil, fmt.Errorf("expense okunamadı: %w", txErr)
 	}
 
-	expense.PaymentDate = paymentDateUnix
+	expense.PaymentDate = paymentDateUnix // 👈 Burada `int64` olarak ata
+
 	if participantsRaw.Valid {
 		expense.Participants = json.RawMessage(participantsRaw.String)
 	} else {
