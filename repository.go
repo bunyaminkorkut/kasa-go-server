@@ -269,26 +269,39 @@ func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail, curre
 				ORDER BY e.payment_date ASC
 			) AS expenses,
 
-			-- borçlar
 			(
-				SELECT JSON_ARRAYAGG(JSON_OBJECT(
-					'from', d.from_user_id,
-					'to', d.to_user_id,
-					'amount', d.amount
-				))
-				FROM group_debts d
-				WHERE d.group_id = g.id
+				SELECT JSON_ARRAYAGG(
+					JSON_OBJECT(
+						'user_id', e.payer_id,
+						'username', payer.fullname,
+						'iban', payer.iban,
+						'amount', p.amount_share,
+						'status', p.payment_status,
+						'expenses', JSON_ARRAY(p.expense_id)
+					)
+				)
+				FROM group_expense_participants p
+				JOIN group_expenses e ON p.expense_id = e.expense_id
+				JOIN users payer ON payer.id = e.payer_id
+				WHERE p.user_id = ? AND e.payer_id != p.user_id AND e.group_id = g.id
 			) AS debts,
 
-			-- alacaklar
+			-- ✅ Sana borçlu olan kişiler
 			(
-				SELECT JSON_ARRAYAGG(JSON_OBJECT(
-					'from', d.to_user_id,
-					'to', d.from_user_id,
-					'amount', d.amount
-				))
-				FROM group_debts d
-				WHERE d.group_id = g.id
+				SELECT JSON_ARRAYAGG(
+					JSON_OBJECT(
+						'user_id', p.user_id,
+						'username', u.fullname,
+						'iban', u.iban,
+						'amount', p.amount_share,
+						'status', p.payment_status,
+						'expenses', JSON_ARRAY(p.expense_id)
+					)
+				)
+				FROM group_expenses e
+				JOIN group_expense_participants p ON e.expense_id = p.expense_id
+				JOIN users u ON u.id = p.user_id
+				WHERE e.payer_id = ? AND p.user_id != e.payer_id AND e.group_id = g.id
 			) AS credits
 
 		FROM groups g
