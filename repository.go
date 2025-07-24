@@ -449,11 +449,14 @@ type ExpenseWithParticipants struct {
 	PaymentDate     int64           `json:"payment_date"`
 	BillImageURL    string          `json:"bill_image_url"`
 	Participants    json.RawMessage `json:"participants"`
-	Debts           json.RawMessage `json:"debts"`
-	Credits         json.RawMessage `json:"credits"`
+}
+type ExpenseWithParticipantsAndBalances struct {
+	Expense ExpenseWithParticipants `json:"expense"`
+	Debts   json.RawMessage         `json:"debts"`
+	Credits json.RawMessage         `json:"credits"`
 }
 
-func (repo *KasaRepository) createGroupExpense(ctx context.Context, payerID string, req CreateExpenseRequest) (*ExpenseWithParticipants, error) {
+func (repo *KasaRepository) createGroupExpense(ctx context.Context, payerID string, req CreateExpenseRequest) (*ExpenseWithParticipantsAndBalances, error) {
 	tx, err := repo.DB.Begin()
 	if err != nil {
 		return nil, fmt.Errorf("transaction başlatılamadı: %w", err)
@@ -468,12 +471,11 @@ func (repo *KasaRepository) createGroupExpense(ctx context.Context, payerID stri
 		}
 	}()
 
-	// Harcamayı ekle
-	result, txErr := tx.ExecContext(ctx,
-		`INSERT INTO group_expenses (group_id, payer_id, amount, description_note, payment_title, bill_image_url, payment_date)
-		 VALUES (?, ?, ?, ?, ?, ?, NOW())`,
-		req.GroupID, payerID, req.TotalAmount, req.Note, req.PaymentTitle, req.BillImageURL,
-	)
+	// Harcama Ekle
+	result, txErr := tx.ExecContext(ctx, `
+		INSERT INTO group_expenses (group_id, payer_id, amount, description_note, payment_title, bill_image_url, payment_date)
+		VALUES (?, ?, ?, ?, ?, ?, NOW())
+	`, req.GroupID, payerID, req.TotalAmount, req.Note, req.PaymentTitle, req.BillImageURL)
 	if txErr != nil {
 		return nil, fmt.Errorf("harcama eklenemedi: %w", txErr)
 	}
@@ -483,6 +485,7 @@ func (repo *KasaRepository) createGroupExpense(ctx context.Context, payerID stri
 		return nil, fmt.Errorf("expense ID alınamadı: %w", txErr)
 	}
 
+	// Tutar kontrolü
 	var sum float64
 	for _, u := range req.Users {
 		if u.Amount == nil {
@@ -494,6 +497,7 @@ func (repo *KasaRepository) createGroupExpense(ctx context.Context, payerID stri
 		return nil, fmt.Errorf("tutar eşleşmiyor (%.2f != %.2f)", sum, req.TotalAmount)
 	}
 
+	// Katılımcılar ekle
 	stmt, txErr := tx.PrepareContext(ctx, `
 		INSERT INTO group_expense_participants (expense_id, user_id, amount_share, payment_status)
 		VALUES (?, ?, ?, ?)
@@ -514,16 +518,15 @@ func (repo *KasaRepository) createGroupExpense(ctx context.Context, payerID stri
 		}
 	}
 
+	// Expense ve katılımcıları getir
 	var expense ExpenseWithParticipants
-	var participantsRaw, debtsRaw, creditsRaw sql.NullString
+	var participantsRaw sql.NullString
 	var paymentDateUnix int64
 
 	txErr = tx.QueryRowContext(ctx, `
 		SELECT
 			e.expense_id, e.group_id, e.payer_id, u.fullname AS payer_name,
 			e.amount, e.description_note, e.payment_title, UNIX_TIMESTAMP(e.payment_date), e.bill_image_url,
-
-			-- Katılımcılar
 			(
 				SELECT JSON_ARRAYAGG(JSON_OBJECT(
 					'user_id', ep.user_id,
@@ -534,37 +537,7 @@ func (repo *KasaRepository) createGroupExpense(ctx context.Context, payerID stri
 				FROM group_expense_participants ep
 				LEFT JOIN users uu ON uu.id = ep.user_id
 				WHERE ep.expense_id = e.expense_id
-			) AS participants,
-
-			-- ✅ Borçlu olduğun kişiler
-			(
-				SELECT JSON_ARRAYAGG(JSON_OBJECT(
-					'user_id', ep.user_id,
-					'username', uu.fullname,
-					'iban', uu.iban,
-					'amount', ep.amount_share,
-					'status', ep.payment_status
-				))
-				FROM group_expense_participants ep
-				JOIN users uu ON uu.id = ep.user_id
-				WHERE ep.expense_id = e.expense_id AND ep.user_id != e.payer_id
-			) AS debts,
-
-			-- ✅ Sana borçlu olan kişiler (yani payer’ın alacakları)
-			(
-				SELECT JSON_ARRAYAGG(JSON_OBJECT(
-					'user_id', e.payer_id,
-					'username', u.fullname,
-					'iban', u.iban,
-					'amount', ep.amount_share,
-					'status', ep.payment_status
-				))
-				FROM group_expense_participants ep
-				JOIN group_expenses e2 ON e2.expense_id = ep.expense_id
-				JOIN users u ON u.id = e2.payer_id
-				WHERE ep.expense_id = e.expense_id AND ep.user_id != e2.payer_id
-			) AS credits
-
+			) AS participants
 		FROM group_expenses e
 		LEFT JOIN users u ON u.id = e.payer_id
 		WHERE e.expense_id = ?
@@ -579,30 +552,63 @@ func (repo *KasaRepository) createGroupExpense(ctx context.Context, payerID stri
 		&paymentDateUnix,
 		&expense.BillImageURL,
 		&participantsRaw,
-		&debtsRaw,
-		&creditsRaw,
 	)
 	if txErr != nil {
 		return nil, fmt.Errorf("expense okunamadı: %w", txErr)
 	}
 
 	expense.PaymentDate = paymentDateUnix
-
+	expense.Participants = []byte("[]")
 	if participantsRaw.Valid {
 		expense.Participants = json.RawMessage(participantsRaw.String)
-	} else {
-		expense.Participants = json.RawMessage("[]")
-	}
-	if debtsRaw.Valid {
-		expense.Debts = json.RawMessage(debtsRaw.String)
-	} else {
-		expense.Debts = json.RawMessage("[]")
-	}
-	if creditsRaw.Valid {
-		expense.Credits = json.RawMessage(creditsRaw.String)
-	} else {
-		expense.Credits = json.RawMessage("[]")
 	}
 
-	return &expense, nil
+	// 🔽 Gruba ait debts ve credits çek
+	var debtsRaw, creditsRaw sql.NullString
+
+	txErr = tx.QueryRowContext(ctx, `
+		SELECT 
+			(
+				SELECT JSON_ARRAYAGG(
+					JSON_OBJECT(
+						'user_id', e.payer_id,
+						'username', payer.fullname,
+						'iban', payer.iban,
+						'amount', p.amount_share,
+						'status', p.payment_status,
+						'expenses', JSON_ARRAY(p.expense_id)
+					)
+				)
+				FROM group_expense_participants p
+				JOIN group_expenses e ON p.expense_id = e.expense_id
+				JOIN users payer ON payer.id = e.payer_id
+				WHERE p.user_id = ? AND e.payer_id != p.user_id AND e.group_id = ?
+			) AS debts,
+			(
+				SELECT JSON_ARRAYAGG(
+					JSON_OBJECT(
+						'user_id', p.user_id,
+						'username', u.fullname,
+						'iban', u.iban,
+						'amount', p.amount_share,
+						'status', p.payment_status,
+						'expenses', JSON_ARRAY(p.expense_id)
+					)
+				)
+				FROM group_expenses e
+				JOIN group_expense_participants p ON e.expense_id = p.expense_id
+				JOIN users u ON u.id = p.user_id
+				WHERE e.payer_id = ? AND p.user_id != e.payer_id AND e.group_id = ?
+			) AS credits
+	`, payerID, req.GroupID, payerID, req.GroupID).Scan(&debtsRaw, &creditsRaw)
+	if txErr != nil {
+		return nil, fmt.Errorf("borç/alacak bilgileri alınamadı: %w", txErr)
+	}
+
+	// ✔️ Sonuç yapısı
+	return &ExpenseWithParticipantsAndBalances{
+		Expense: expense,
+		Debts:   json.RawMessage(debtsRaw.String),
+		Credits: json.RawMessage(creditsRaw.String),
+	}, nil
 }
