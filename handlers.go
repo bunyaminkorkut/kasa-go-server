@@ -287,7 +287,7 @@ func GetGroups(repo *KasaRepository) http.HandlerFunc {
 			var groupID int64
 			var groupName, creatorID, creatorName, creatorEmail string
 			var createdAt int64
-			var membersJSON, requestsJSON, expensesJSON []byte
+			var membersJSON, requestsJSON, expensesJSON, debtsJSON, creditsJSON []byte
 
 			if err := rows.Scan(
 				&groupID,
@@ -299,16 +299,20 @@ func GetGroups(repo *KasaRepository) http.HandlerFunc {
 				&membersJSON,
 				&requestsJSON,
 				&expensesJSON,
+				&debtsJSON,
+				&creditsJSON,
 			); err != nil {
 				log.Println("Satır okunamadı:", err)
 				http.Error(w, "Grup bilgileri alınamadı", http.StatusInternalServerError)
 				return
 			}
 
-			var members, requests, expenses []map[string]interface{}
+			var members, requests, expenses, debts, credits []map[string]interface{}
 			_ = json.Unmarshal(membersJSON, &members)
 			_ = json.Unmarshal(requestsJSON, &requests)
 			_ = json.Unmarshal(expensesJSON, &expenses)
+			_ = json.Unmarshal(debtsJSON, &debts)
+			_ = json.Unmarshal(creditsJSON, &credits)
 
 			groups = append(groups, map[string]interface{}{
 				"id":         groupID,
@@ -323,6 +327,8 @@ func GetGroups(repo *KasaRepository) http.HandlerFunc {
 				"members":          members,
 				"pending_requests": requests,
 				"expenses":         expenses,
+				"debts":            debts,
+				"credits":          credits,
 			})
 		}
 

@@ -92,34 +92,71 @@ func (repo *KasaRepository) getMyGroups(userID string) (*sql.Rows, error) {
 						'payment_title', e.payment_title,
 						'bill_image_url', e.bill_image_url,
 						'payer_id', e.payer_id,
-						'payer_name', pu.fullname,  -- burası eklendi
+						'payer_name', pu.fullname,
 						'participants', (
 							SELECT JSON_ARRAYAGG(
 								JSON_OBJECT(
 									'user_id', p.user_id,
-									'user_name', u.fullname,      -- fullname eklendi
+									'user_name', u.fullname,
 									'amount_share', p.amount_share,
 									'payment_status', p.payment_status
 								)
 							)
 							FROM group_expense_participants p
-							JOIN users u ON p.user_id = u.id       -- join users ile
+							JOIN users u ON p.user_id = u.id
 							WHERE p.expense_id = e.expense_id
 						)
 					)
 				)
 				FROM group_expenses e
-				LEFT JOIN users pu ON pu.id = e.payer_id  -- payer'ın ismini almak için join
+				LEFT JOIN users pu ON pu.id = e.payer_id
 				WHERE e.group_id = g.id
 				ORDER BY e.payment_date ASC
-			) AS expenses
+			) AS expenses,
+
+			-- ✅ Borçlu olduğun kişiler
+			(
+				SELECT JSON_ARRAYAGG(
+					JSON_OBJECT(
+						'user_id', e.payer_id,
+						'username', payer.fullname,
+						'iban', payer.iban,
+						'amount', p.amount_share,
+						'status', p.payment_status,
+						'expenses', JSON_ARRAY(p.expense_id)
+					)
+				)
+				FROM group_expense_participants p
+				JOIN group_expenses e ON p.expense_id = e.expense_id
+				JOIN users payer ON payer.id = e.payer_id
+				WHERE p.user_id = ? AND e.payer_id != p.user_id AND e.group_id = g.id
+			) AS debts,
+
+			-- ✅ Sana borçlu olan kişiler
+			(
+				SELECT JSON_ARRAYAGG(
+					JSON_OBJECT(
+						'user_id', p.user_id,
+						'username', u.fullname,
+						'iban', u.iban,
+						'amount', p.amount_share,
+						'status', p.payment_status,
+						'expenses', JSON_ARRAY(p.expense_id)
+					)
+				)
+				FROM group_expenses e
+				JOIN group_expense_participants p ON e.expense_id = p.expense_id
+				JOIN users u ON u.id = p.user_id
+				WHERE e.payer_id = ? AND p.user_id != e.payer_id AND e.group_id = g.id
+			) AS credits
+
 		FROM groups g
 		JOIN users u ON g.creator_id = u.id
 		JOIN group_members gm ON g.id = gm.group_id
 		WHERE gm.user_id = ?
 		GROUP BY g.id
 		ORDER BY g.created_at DESC
-	`, userID)
+	`, userID, userID, userID) // 3 kez userID: debts, credits ve WHERE gm.user_id
 }
 
 func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail, currentUserID string) (*sql.Row, error) {
