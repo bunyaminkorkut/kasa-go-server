@@ -203,7 +203,7 @@ func CreateGroupHandler(repo *KasaRepository) http.HandlerFunc {
 			var groupID int64
 			var groupName, creatorID, creatorName, creatorEmail string
 			var createdAt int64
-			var membersJSON, requestsJSON, expensesJSON []byte
+			var membersJSON, requestsJSON, expensesJSON, debtsJSON, creditsJSON []byte
 
 			if err := rows.Scan(
 				&groupID,
@@ -215,26 +215,20 @@ func CreateGroupHandler(repo *KasaRepository) http.HandlerFunc {
 				&membersJSON,
 				&requestsJSON,
 				&expensesJSON,
+				&debtsJSON,
+				&creditsJSON,
 			); err != nil {
 				log.Println("Satır okunamadı:", err)
 				http.Error(w, "Grup bilgileri alınamadı", http.StatusInternalServerError)
 				return
 			}
 
-			// JSON alanlarını çözümle
-			var members, requests, expenses []map[string]interface{}
-			if err := json.Unmarshal(membersJSON, &members); err != nil {
-				log.Println("Üye verisi çözümlenemedi:", err)
-				members = []map[string]interface{}{}
-			}
-			if err := json.Unmarshal(requestsJSON, &requests); err != nil {
-				log.Println("İstek verisi çözümlenemedi:", err)
-				requests = []map[string]interface{}{}
-			}
-			if err := json.Unmarshal(expensesJSON, &expenses); err != nil {
-				log.Println("Gider verisi çözümlenemedi:", err)
-				expenses = []map[string]interface{}{}
-			}
+			var members, requests, expenses, debts, credits []map[string]interface{}
+			_ = json.Unmarshal(membersJSON, &members)
+			_ = json.Unmarshal(requestsJSON, &requests)
+			_ = json.Unmarshal(expensesJSON, &expenses)
+			_ = json.Unmarshal(debtsJSON, &debts)
+			_ = json.Unmarshal(creditsJSON, &credits)
 
 			groups = append(groups, map[string]interface{}{
 				"id":         groupID,
@@ -249,8 +243,13 @@ func CreateGroupHandler(repo *KasaRepository) http.HandlerFunc {
 				"members":          members,
 				"pending_requests": requests,
 				"expenses":         expenses,
+				"debts":            debts,
+				"credits":          credits,
 			})
 		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(groups)
 
 		// Yanıtı gönder
 		w.Header().Set("Content-Type", "application/json")
@@ -382,9 +381,11 @@ func SendAddRequest(repo *KasaRepository) http.HandlerFunc {
 			creatorID    string
 			creatorName  string
 			creatorEmail string
-			membersJSON  sql.NullString
-			requestsJSON sql.NullString
-			expensesJSON sql.NullString
+			membersJSON,
+			requestsJSON,
+			expensesJSON,
+			debtsJSON,
+			creditsJSON sql.NullString
 		)
 
 		err = row.Scan(
@@ -397,6 +398,8 @@ func SendAddRequest(repo *KasaRepository) http.HandlerFunc {
 			&membersJSON,
 			&requestsJSON,
 			&expensesJSON,
+			&debtsJSON,
+			&creditsJSON,
 		)
 		if err != nil {
 			log.Printf("Veri okunurken hata: %v\n", err)
@@ -418,23 +421,28 @@ func SendAddRequest(repo *KasaRepository) http.HandlerFunc {
 
 		if membersJSON.Valid {
 			var members []map[string]interface{}
-			if err := json.Unmarshal([]byte(membersJSON.String), &members); err == nil {
-				resp["members"] = members
-			}
+			_ = json.Unmarshal([]byte(membersJSON.String), &members)
+			resp["members"] = members
 		}
-
 		if requestsJSON.Valid {
-			var pending []map[string]interface{}
-			if err := json.Unmarshal([]byte(requestsJSON.String), &pending); err == nil {
-				resp["pending_requests"] = pending
-			}
+			var requests []map[string]interface{}
+			_ = json.Unmarshal([]byte(requestsJSON.String), &requests)
+			resp["pending_requests"] = requests
 		}
-
 		if expensesJSON.Valid {
 			var expenses []map[string]interface{}
-			if err := json.Unmarshal([]byte(expensesJSON.String), &expenses); err == nil {
-				resp["expenses"] = expenses
-			}
+			_ = json.Unmarshal([]byte(expensesJSON.String), &expenses)
+			resp["expenses"] = expenses
+		}
+		if debtsJSON.Valid {
+			var debts []map[string]interface{}
+			_ = json.Unmarshal([]byte(debtsJSON.String), &debts)
+			resp["debts"] = debts
+		}
+		if creditsJSON.Valid {
+			var credits []map[string]interface{}
+			_ = json.Unmarshal([]byte(creditsJSON.String), &credits)
+			resp["credits"] = credits
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -548,34 +556,45 @@ func handleAcceptAddRequest(repo *KasaRepository) http.HandlerFunc {
 			})
 		}
 
-		groupRows, err := repo.getMyGroups(userUID.(string))
+		rows, err := repo.getMyGroups(userUID.(string))
 		if err != nil {
+			log.Println("Grup bilgileri alınamadı:", err)
 			http.Error(w, "Grup bilgileri alınamadı", http.StatusInternalServerError)
 			return
 		}
-		defer groupRows.Close()
+		defer rows.Close()
 
 		var groups []map[string]interface{}
-		for groupRows.Next() {
+		for rows.Next() {
 			var groupID int64
 			var groupName, creatorID, creatorName, creatorEmail string
 			var createdAt int64
-			var membersJSON, requestsJSON, expensesJSON []byte
+			var membersJSON, requestsJSON, expensesJSON, debtsJSON, creditsJSON []byte
 
-			if err := groupRows.Scan(
-				&groupID, &groupName, &createdAt,
-				&creatorID, &creatorName, &creatorEmail,
-				&membersJSON, &requestsJSON, &expensesJSON,
+			if err := rows.Scan(
+				&groupID,
+				&groupName,
+				&createdAt,
+				&creatorID,
+				&creatorName,
+				&creatorEmail,
+				&membersJSON,
+				&requestsJSON,
+				&expensesJSON,
+				&debtsJSON,
+				&creditsJSON,
 			); err != nil {
 				log.Println("Satır okunamadı:", err)
 				http.Error(w, "Grup bilgileri alınamadı", http.StatusInternalServerError)
 				return
 			}
 
-			var members, requests, expenses []map[string]interface{}
+			var members, requests, expenses, debts, credits []map[string]interface{}
 			_ = json.Unmarshal(membersJSON, &members)
 			_ = json.Unmarshal(requestsJSON, &requests)
 			_ = json.Unmarshal(expensesJSON, &expenses)
+			_ = json.Unmarshal(debtsJSON, &debts)
+			_ = json.Unmarshal(creditsJSON, &credits)
 
 			groups = append(groups, map[string]interface{}{
 				"id":         groupID,
@@ -590,6 +609,8 @@ func handleAcceptAddRequest(repo *KasaRepository) http.HandlerFunc {
 				"members":          members,
 				"pending_requests": requests,
 				"expenses":         expenses,
+				"debts":            debts,
+				"credits":          credits,
 			})
 		}
 

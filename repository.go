@@ -195,7 +195,7 @@ func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail, curre
 		return nil, err
 	}
 
-	// Güncel grup bilgilerini çek (expenses ve participants dahil)
+	// Güncel grup bilgilerini çek
 	row := repo.DB.QueryRow(`
 		SELECT 
 			g.id AS group_id,
@@ -205,6 +205,7 @@ func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail, curre
 			u.fullname AS creator_name,
 			u.email AS creator_email,
 
+			-- üyeler
 			(
 				SELECT JSON_ARRAYAGG(JSON_OBJECT(
 					'id', gm_user.id,
@@ -216,6 +217,7 @@ func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail, curre
 				WHERE gm.group_id = g.id
 			) AS members,
 
+			-- istekler
 			(
 				SELECT JSON_ARRAYAGG(JSON_OBJECT(
 					'request_id', r.request_id,
@@ -233,6 +235,7 @@ func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail, curre
 				WHERE r.group_id = g.id AND r.request_status = 'pending'
 			) AS pending_requests,
 
+			-- harcamalar
 			(
 				SELECT JSON_ARRAYAGG(
 					JSON_OBJECT(
@@ -244,31 +247,55 @@ func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail, curre
 						'payment_title', e.payment_title,
 						'bill_image_url', e.bill_image_url,
 						'payer_id', e.payer_id,
-						'payer_name', pu.fullname,  -- burası eklendi
+						'payer_name', pu.fullname,
 						'participants', (
 							SELECT JSON_ARRAYAGG(
 								JSON_OBJECT(
 									'user_id', p.user_id,
-									'user_name', u.fullname,      -- fullname eklendi
+									'user_name', u.fullname,
 									'amount_share', p.amount_share,
 									'payment_status', p.payment_status
 								)
 							)
 							FROM group_expense_participants p
-							JOIN users u ON p.user_id = u.id       -- join users ile
+							JOIN users u ON p.user_id = u.id
 							WHERE p.expense_id = e.expense_id
 						)
 					)
 				)
 				FROM group_expenses e
-				LEFT JOIN users pu ON pu.id = e.payer_id  -- payer'ın ismini almak için join
+				LEFT JOIN users pu ON pu.id = e.payer_id
 				WHERE e.group_id = g.id
 				ORDER BY e.payment_date ASC
-			) AS expenses
+			) AS expenses,
+
+			-- borçlar
+			(
+				SELECT JSON_ARRAYAGG(JSON_OBJECT(
+					'from', d.from_user_id,
+					'to', d.to_user_id,
+					'amount', d.amount
+				))
+				FROM group_debts d
+				WHERE d.group_id = g.id
+			) AS debts,
+
+			-- alacaklar
+			(
+				SELECT JSON_ARRAYAGG(JSON_OBJECT(
+					'from', d.to_user_id,
+					'to', d.from_user_id,
+					'amount', d.amount
+				))
+				FROM group_debts d
+				WHERE d.group_id = g.id
+			) AS credits
+
 		FROM groups g
 		JOIN users u ON g.creator_id = u.id
 		WHERE g.id = ?
 	`, groupID)
+
 	return row, nil
 }
 
