@@ -153,17 +153,20 @@ type CreateGroupRequest struct {
 
 func CreateGroupHandler(repo *KasaRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Yalnızca POST isteği kabul edilir
 		if r.Method != http.MethodPost {
 			http.Error(w, "Yalnızca POST metodu desteklenir", http.StatusMethodNotAllowed)
 			return
 		}
 
-		userUID := r.Context().Value("userUID")
-		if userUID == nil {
+		// Kimlik doğrulama
+		userUID, ok := r.Context().Value("userUID").(string)
+		if !ok || userUID == "" {
 			http.Error(w, "Yetkisiz erişim", http.StatusUnauthorized)
 			return
 		}
 
+		// İstek gövdesini çözümle
 		var req CreateGroupRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "Geçersiz JSON", http.StatusBadRequest)
@@ -171,25 +174,90 @@ func CreateGroupHandler(repo *KasaRepository) http.HandlerFunc {
 		}
 		defer r.Body.Close()
 
+		// Boş grup adı kontrolü
 		req.GroupName = strings.TrimSpace(req.GroupName)
 		if req.GroupName == "" {
 			http.Error(w, "group_name alanı zorunludur", http.StatusBadRequest)
 			return
 		}
 
-		groupID, err := repo.CreateGroup(userUID.(string), req.GroupName)
+		// Grup oluştur
+		_, err := repo.CreateGroup(userUID, req.GroupName)
 		if err != nil {
+			log.Println("Grup oluşturulamadı:", err)
 			http.Error(w, "Grup oluşturulamadı", http.StatusInternalServerError)
 			return
 		}
 
+		// Kullanıcının grup listesini getir
+		rows, err := repo.getMyGroups(userUID)
+		if err != nil {
+			log.Println("Grup bilgileri alınamadı:", err)
+			http.Error(w, "Grup bilgileri alınamadı", http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		var groups []map[string]interface{}
+		for rows.Next() {
+			var groupID int64
+			var groupName, creatorID, creatorName, creatorEmail string
+			var createdAt int64
+			var membersJSON, requestsJSON, expensesJSON []byte
+
+			if err := rows.Scan(
+				&groupID,
+				&groupName,
+				&createdAt,
+				&creatorID,
+				&creatorName,
+				&creatorEmail,
+				&membersJSON,
+				&requestsJSON,
+				&expensesJSON,
+			); err != nil {
+				log.Println("Satır okunamadı:", err)
+				http.Error(w, "Grup bilgileri alınamadı", http.StatusInternalServerError)
+				return
+			}
+
+			// JSON alanlarını çözümle
+			var members, requests, expenses []map[string]interface{}
+			if err := json.Unmarshal(membersJSON, &members); err != nil {
+				log.Println("Üye verisi çözümlenemedi:", err)
+				members = []map[string]interface{}{}
+			}
+			if err := json.Unmarshal(requestsJSON, &requests); err != nil {
+				log.Println("İstek verisi çözümlenemedi:", err)
+				requests = []map[string]interface{}{}
+			}
+			if err := json.Unmarshal(expensesJSON, &expenses); err != nil {
+				log.Println("Gider verisi çözümlenemedi:", err)
+				expenses = []map[string]interface{}{}
+			}
+
+			groups = append(groups, map[string]interface{}{
+				"id":         groupID,
+				"name":       groupName,
+				"created_at": createdAt,
+				"is_admin":   creatorID == userUID,
+				"creator": map[string]interface{}{
+					"id":       creatorID,
+					"fullname": creatorName,
+					"email":    creatorEmail,
+				},
+				"members":          members,
+				"pending_requests": requests,
+				"expenses":         expenses,
+			})
+		}
+
+		// Yanıtı gönder
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"message":    "Grup başarıyla oluşturuldu",
-			"group_id":   groupID,
-			"group_name": req.GroupName,
-		})
+		if err := json.NewEncoder(w).Encode(groups); err != nil {
+			log.Println("Yanıt gönderilemedi:", err)
+		}
 	}
 }
 
