@@ -559,11 +559,11 @@ func (repo *KasaRepository) createGroupExpense(ctx context.Context, payerID stri
 
 	expense.PaymentDate = paymentDateUnix
 	expense.Participants = []byte("[]")
-	if participantsRaw.Valid {
+	if participantsRaw.Valid && participantsRaw.String != "" {
 		expense.Participants = json.RawMessage(participantsRaw.String)
 	}
 
-	// 🔽 Gruba ait debts ve credits çek
+	// Gruba ait debts ve credits çek
 	var debtsRaw, creditsRaw sql.NullString
 
 	txErr = tx.QueryRowContext(ctx, `
@@ -605,10 +605,20 @@ func (repo *KasaRepository) createGroupExpense(ctx context.Context, payerID stri
 		return nil, fmt.Errorf("borç/alacak bilgileri alınamadı: %w", txErr)
 	}
 
+	// Güvenli JSON set et
+	debts := []byte("[]")
+	if debtsRaw.Valid && debtsRaw.String != "" {
+		debts = json.RawMessage(debtsRaw.String)
+	}
+	credits := []byte("[]")
+	if creditsRaw.Valid && creditsRaw.String != "" {
+		credits = json.RawMessage(creditsRaw.String)
+	}
+
 	// ✔️ Sonuç yapısı
 	return &ExpenseWithParticipantsAndBalances{
 		Expense: expense,
-		Debts:   json.RawMessage(debtsRaw.String),
-		Credits: json.RawMessage(creditsRaw.String),
+		Debts:   debts,
+		Credits: credits,
 	}, nil
 }
