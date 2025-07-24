@@ -307,7 +307,7 @@ func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail, curre
 		FROM groups g
 		JOIN users u ON g.creator_id = u.id
 		WHERE g.id = ?
-	`, groupID)
+	`, currentUserID, currentUserID, groupID)
 
 	return row, nil
 }
