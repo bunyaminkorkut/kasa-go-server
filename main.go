@@ -93,7 +93,7 @@ func main() {
 	http.Handle("/add-group-expense", AuthMiddleware(handleCreateGroupExpense(repo), repo))
 
 	fmt.Println("🚀 Sunucu 80 portunda başlatıldı...")
-	log.Fatal(http.ListenAndServe(":80", nil))
+	log.Fatal(http.ListenAndServe("0.0.0.0:80", nil))
 }
 
 // Basit SQL ayırıcı (noktalı virgülle ayırır)
