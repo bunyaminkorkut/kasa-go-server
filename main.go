@@ -82,6 +82,8 @@ func main() {
 
 	http.Handle("/get-me", AuthMiddleware(getMeHandler(repo), repo))
 
+	http.Handle("/update-user", AuthMiddleware(updateUserHandler(repo), repo))
+
 	http.Handle("/create-group", AuthMiddleware(CreateGroupHandler(repo), repo))
 
 	http.Handle("/groups", AuthMiddleware(GetGroups(repo), repo))

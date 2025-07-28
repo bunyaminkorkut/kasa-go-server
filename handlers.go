@@ -841,3 +841,56 @@ func getMeHandler(repo *KasaRepository) http.HandlerFunc {
 		json.NewEncoder(w).Encode(user)
 	}
 }
+
+func updateUserHandler(repo *KasaRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch {
+			http.Error(w, "Yalnızca PATCH metodu desteklenir", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Context'ten userUID'yi al ve string olarak atama yap
+		userUIDVal := r.Context().Value("userUID")
+		userUID, ok := userUIDVal.(string)
+		if !ok || userUID == "" {
+			http.Error(w, "Yetkisiz erişim: Kullanıcı ID alınamadı", http.StatusUnauthorized)
+			return
+		}
+
+		var updateData struct {
+			FullName *string `json:"fullName,omitempty"`
+			IBAN     *string `json:"iban,omitempty"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
+			http.Error(w, "Geçersiz JSON formatı", http.StatusBadRequest)
+			return
+		}
+
+		if updateData.FullName == nil && updateData.IBAN == nil {
+			http.Error(w, "Güncellenecek alan belirtilmedi", http.StatusBadRequest)
+			return
+		}
+
+		user, err := repo.GetUserByID(userUID)
+		if err != nil {
+			http.Error(w, "Kullanıcı bulunamadı", http.StatusNotFound)
+			return
+		}
+
+		if updateData.FullName != nil {
+			user.FullName = *updateData.FullName
+		}
+		if updateData.IBAN != nil {
+			user.IBAN = *updateData.IBAN
+		}
+
+		if err := repo.UpdateUser(user); err != nil {
+			http.Error(w, "Kullanıcı güncelleme işlemi başarısız oldu", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(user)
+	}
+}

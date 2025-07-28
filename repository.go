@@ -659,3 +659,13 @@ func (repo *KasaRepository) InsertUser(user User) error {
 	}
 	return err
 }
+
+func (repo *KasaRepository) UpdateUser(user *User) error {
+	query := `
+        UPDATE users 
+        SET fullname = ?, iban = ? 
+        WHERE id = ?
+    `
+	_, err := repo.DB.Exec(query, user.FullName, user.IBAN, user.ID)
+	return err
+}
