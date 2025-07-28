@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS users (
     id VARCHAR(100) PRIMARY KEY,
     fullname VARCHAR(50) NOT NULL,
     email VARCHAR(100) NOT NULL UNIQUE,
-    password_hash VARCHAR(255) NOT NULL,
+    password_hash VARCHAR(255) NULL,
     iban VARCHAR(34),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
