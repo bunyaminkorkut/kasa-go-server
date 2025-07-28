@@ -250,14 +250,12 @@ func CreateGroupHandler(repo *KasaRepository) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(groups)
+		w.WriteHeader(http.StatusCreated) // Status code'u burda set et
 
-		// Yanıtı gönder
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
 		if err := json.NewEncoder(w).Encode(groups); err != nil {
 			log.Println("Yanıt gönderilemedi:", err)
 		}
+
 	}
 }
 
