@@ -646,9 +646,16 @@ func (repo *KasaRepository) GetUserByID(userID string) (*User, error) {
 
 // Kullanıcıyı ekle
 func (repo *KasaRepository) InsertUser(user User) error {
-	_, err := repo.DB.Exec(`
+	query := `
 		INSERT INTO users (id, email, fullname, iban)
-		VALUES (?, ?, ?, ?)`,
-		user.ID, user.Email, user.FullName, user.IBAN)
+		VALUES (?, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE 
+			fullname = VALUES(fullname),
+			iban = VALUES(iban)
+	`
+	_, err := repo.DB.Exec(query, user.ID, user.Email, user.FullName, user.IBAN)
+	if err != nil {
+		log.Printf("InsertUser (update'li) hatası: %v", err)
+	}
 	return err
 }
