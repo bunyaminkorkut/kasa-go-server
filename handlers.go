@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -740,5 +741,72 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(expense)
+	}
+}
+
+func LoginWGoogleHandler(repo *KasaRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		type RequestBody struct {
+			UserID   string `json:"userId"`
+			Email    string `json:"email"`
+			IDToken  string `json:"idToken"`
+			FullName string `json:"fullName"` // opsiyonel ama ilk kayıtta lazım olabilir
+			IBAN     string `json:"iban"`     // opsiyonel
+		}
+
+		var req RequestBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Geçersiz istek", http.StatusBadRequest)
+			return
+		}
+
+		// === 1. Token doğrulama ve UID/email eşleşmesi ===
+		err := ValidateFirebaseTokenWithUser(req.IDToken, req.UserID, req.Email)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Firebase doğrulama hatası: %v", err), http.StatusUnauthorized)
+			return
+		}
+
+		// === 2. Kullanıcı veritabanında var mı kontrol et ===
+		user, err := repo.GetUserByID(req.UserID)
+		if err != nil && err != sql.ErrNoRows {
+			http.Error(w, "Veritabanı hatası", http.StatusInternalServerError)
+			return
+		}
+
+		// === 3. Kullanıcı veritabanında yoksa ekle ===
+		if user == nil {
+			err := repo.InsertUser(User{
+				ID:       req.UserID,
+				Email:    req.Email,
+				FullName: req.FullName,
+				IBAN:     req.IBAN,
+			})
+			if err != nil {
+				http.Error(w, "Kullanıcı kaydı başarısız", http.StatusInternalServerError)
+				return
+			}
+		} else {
+			// === 4. Email uyuşmazsa hata ver ===
+			if user.Email != req.Email {
+				http.Error(w, "Email uyuşmazlığı", http.StatusUnauthorized)
+				return
+			}
+		}
+
+		// === 5. JWT oluştur ===
+		token, err := generateJWT(map[string]string{
+			"uid":   req.UserID,
+			"email": req.Email,
+		})
+		if err != nil {
+			http.Error(w, "JWT oluşturulamadı", http.StatusInternalServerError)
+			return
+		}
+
+		// === 6. Başarılı yanıt ===
+		json.NewEncoder(w).Encode(map[string]string{
+			"token": token,
+		})
 	}
 }

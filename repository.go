@@ -622,3 +622,33 @@ func (repo *KasaRepository) createGroupExpense(ctx context.Context, payerID stri
 		Credits: credits,
 	}, nil
 }
+
+type User struct {
+	ID       string `json:"id"`
+	Email    string `json:"email"`
+	FullName string `json:"fullName"`
+	IBAN     string `json:"iban"`
+}
+
+// Kullanıcıyı ID ile al
+func (repo *KasaRepository) GetUserByID(userID string) (*User, error) {
+	var user User
+	err := repo.DB.QueryRow("SELECT id, email, fullname, iban FROM users WHERE id = ?", userID).
+		Scan(&user.ID, &user.Email, &user.FullName, &user.IBAN)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, err
+		}
+		return nil, fmt.Errorf("DB hatası: %w", err)
+	}
+	return &user, nil
+}
+
+// Kullanıcıyı ekle
+func (repo *KasaRepository) InsertUser(user User) error {
+	_, err := repo.DB.Exec(`
+		INSERT INTO users (id, email, fullname, iban)
+		VALUES (?, ?, ?, ?)`,
+		user.ID, user.Email, user.FullName, user.IBAN)
+	return err
+}

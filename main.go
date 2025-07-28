@@ -78,6 +78,8 @@ func main() {
 
 	http.HandleFunc("/login", LoginUserHandler(repo))
 
+	http.HandleFunc("/login-google", LoginWGoogleHandler(repo))
+
 	http.Handle("/create-group", AuthMiddleware(CreateGroupHandler(repo), repo))
 
 	http.Handle("/groups", AuthMiddleware(GetGroups(repo), repo))

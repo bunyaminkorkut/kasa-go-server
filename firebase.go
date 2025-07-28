@@ -161,3 +161,42 @@ type FirebaseAuthResult struct {
 	UID       string
 	Email     string
 }
+
+func ValidateFirebaseTokenWithUser(idToken, expectedUID, expectedEmail string) error {
+	ctx := context.Background()
+
+	credsFile := os.Getenv("FIREBASE_CREDENTIALS")
+	if credsFile == "" {
+		return fmt.Errorf("❌ FIREBASE_CREDENTIALS .env içinde tanımlı değil")
+	}
+
+	opt := option.WithCredentialsFile(credsFile)
+
+	app, err := firebase.NewApp(ctx, nil, opt)
+	if err != nil {
+		return fmt.Errorf("❌ Firebase başlatılamadı: %w", err)
+	}
+
+	authClient, err := app.Auth(ctx)
+	if err != nil {
+		return fmt.Errorf("❌ Firebase Auth başlatılamadı: %w", err)
+	}
+
+	token, err := authClient.VerifyIDToken(ctx, idToken)
+	if err != nil {
+		return fmt.Errorf("❌ Token doğrulama başarısız: %w", err)
+	}
+
+	// UID kontrolü
+	if token.UID != expectedUID {
+		return fmt.Errorf("❌ UID uyuşmuyor. Token UID: %s, Beklenen UID: %s", token.UID, expectedUID)
+	}
+
+	// Email kontrolü (token.Claims içinde olabilir)
+	emailClaim, ok := token.Claims["email"].(string)
+	if !ok || emailClaim != expectedEmail {
+		return fmt.Errorf("❌ Email uyuşmuyor. Token Email: %v, Beklenen Email: %s", emailClaim, expectedEmail)
+	}
+
+	return nil // hepsi doğru
+}
