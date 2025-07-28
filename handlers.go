@@ -810,3 +810,34 @@ func LoginWGoogleHandler(repo *KasaRepository) http.HandlerFunc {
 		})
 	}
 }
+
+func getMeHandler(repo *KasaRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Yalnızca GET metodu desteklenir", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// JWT'den gelen kullanıcı UID'si
+		userUID := r.Context().Value("userUID")
+		if userUID == nil {
+			http.Error(w, "Yetkisiz erişim", http.StatusUnauthorized)
+			return
+		}
+
+		// Kullanıcıyı veritabanından al
+		user, err := repo.GetUserByID(userUID.(string))
+		if err != nil {
+			if err == sql.ErrNoRows {
+				http.Error(w, "Kullanıcı bulunamadı", http.StatusNotFound)
+				return
+			}
+			http.Error(w, "Veritabanı hatası", http.StatusInternalServerError)
+			return
+		}
+
+		// Başarılı yanıt
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(user)
+	}
+}
