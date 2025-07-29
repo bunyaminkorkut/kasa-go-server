@@ -68,7 +68,19 @@ func main() {
 
 	// HTTP endpointleri
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "Aşkımmm")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprintln(w, `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Deneme Sayfası</title>
+        </head>
+        <body>
+            <h1>Hoşgeldin!</h1>
+            <p>Bu bir basit HTML sayfasıdır.</p>
+        </body>
+        </html>
+    `)
 	})
 
 	http.HandleFunc("/v", func(w http.ResponseWriter, r *http.Request) {
