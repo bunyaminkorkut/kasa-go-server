@@ -669,3 +669,25 @@ func (repo *KasaRepository) UpdateUser(user *User) error {
 	_, err := repo.DB.Exec(query, user.FullName, user.IBAN, user.ID)
 	return err
 }
+
+func (repo *KasaRepository) PayGroupExpense(userID string, sendedUserID string, groupID int64) error {
+	query := `
+		UPDATE group_expense_participants gep
+		JOIN group_expenses ge ON gep.expense_id = ge.expense_id
+		SET gep.payment_status = 'paid'
+		WHERE ge.group_id = ?
+		AND (
+			(ge.payer_id = ? AND gep.user_id = ?)
+			OR
+			(ge.payer_id = ? AND gep.user_id = ?)
+		)
+	`
+	_, err := repo.DB.Exec(query, groupID, userID, sendedUserID, sendedUserID, userID)
+	if err != nil {
+		log.Printf("Harcama ödeme hatası: %v", err)
+		return err
+	}
+
+	log.Printf("Harcama ödendi: userID=%s, sendedUserID=%s, groupID=%d", userID, sendedUserID, groupID)
+	return nil
+}

@@ -110,6 +110,8 @@ func main() {
 
 	http.Handle("/add-group-expense", AuthMiddleware(handleCreateGroupExpense(repo), repo))
 
+	http.Handle("/pay-group-expense", AuthMiddleware(handlePayGroupExpense(repo), repo))
+
 	fmt.Println("🚀 Sunucu 80 portunda başlatıldı...")
 	log.Fatal(http.ListenAndServe("0.0.0.0:8080", nil))
 }

@@ -892,3 +892,42 @@ func updateUserHandler(repo *KasaRepository) http.HandlerFunc {
 		json.NewEncoder(w).Encode(user)
 	}
 }
+
+func handlePayGroupExpense(repo *KasaRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Yalnızca POST metodu desteklenir", http.StatusMethodNotAllowed)
+			return
+		}
+
+		userUID := r.Context().Value("userUID")
+		if userUID == nil {
+			http.Error(w, "Yetkisiz erişim", http.StatusUnauthorized)
+			return
+		}
+
+		var req struct {
+			SendedUserID string `json:"sended_user_id"`
+			GroupID      int64  `json:"group_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Geçersiz JSON formatı", http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+
+		err := repo.PayGroupExpense(userUID.(string), req.SendedUserID, req.GroupID)
+		if err != nil {
+			log.Println("Harcama ödeme hatası:", err)
+			http.Error(w, "Harcama ödemesi başarısız", http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"message": "Harcama başarıyla ödendi",
+		})
+		log.Println("Harcama başarıyla ödendi:", req.SendedUserID)
+		defer r.Body.Close()
+	}
+}
