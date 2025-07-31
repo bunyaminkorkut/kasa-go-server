@@ -172,16 +172,29 @@ func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail, curre
 		return nil, err
 	}
 
+	// Kullanıcı zaten grup üyesi mi?
+	var memberCount int
+	err = repo.DB.QueryRow(`
+		SELECT COUNT(*) FROM group_members 
+		WHERE group_id = ? AND user_id = ?
+	`, groupID, addedMemberID).Scan(&memberCount)
+	if err != nil {
+		return nil, fmt.Errorf("üye kontrolü sırasında hata: %v", err)
+	}
+	if memberCount > 0 {
+		return nil, fmt.Errorf("bu kullanıcı zaten grup üyesi")
+	}
+
 	// Aynı istek zaten varsa tekrar ekleme
-	var count int
+	var requestCount int
 	err = repo.DB.QueryRow(`
 		SELECT COUNT(*) FROM group_add_requests 
 		WHERE group_id = ? AND user_id = ? AND request_status = 'pending'
-	`, groupID, addedMemberID).Scan(&count)
+	`, groupID, addedMemberID).Scan(&requestCount)
 	if err != nil {
 		return nil, fmt.Errorf("mevcut istek kontrolü sırasında hata: %v", err)
 	}
-	if count > 0 {
+	if requestCount > 0 {
 		return nil, fmt.Errorf("bu kullanıcıya zaten bekleyen bir istek gönderilmiş")
 	}
 
