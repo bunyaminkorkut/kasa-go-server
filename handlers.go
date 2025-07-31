@@ -960,7 +960,7 @@ func uploadPhotoHandler(repo *KasaRepository) http.HandlerFunc {
 		uploadDir := "./uploads"
 		os.MkdirAll(uploadDir, os.ModePerm)
 
-		filename := fmt.Sprintf("%d_%s", time.Now().UnixNano(), filepath.Base(handler.Filename))
+		filename := fmt.Sprintf("%d_%s", time.Now().Unix(), strings.ReplaceAll(filepath.Base(handler.Filename), " ", "_"))
 		filePath := filepath.Join(uploadDir, filename)
 
 		dst, err := os.Create(filePath)
