@@ -4,9 +4,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 )
 
 func RegisterUserHandler(repo *KasaRepository) http.HandlerFunc {
@@ -929,5 +933,53 @@ func handlePayGroupExpense(repo *KasaRepository) http.HandlerFunc {
 		})
 		log.Println("Harcama başarıyla ödendi:", req.SendedUserID)
 		defer r.Body.Close()
+	}
+}
+
+func uploadPhotoHandler(repo *KasaRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Parse multipart form (max 10 MB)
+		err := r.ParseMultipartForm(10 << 20)
+		if err != nil {
+			http.Error(w, "Could not parse multipart form", http.StatusBadRequest)
+			return
+		}
+
+		file, handler, err := r.FormFile("photo")
+		if err != nil {
+			http.Error(w, "Photo file is required", http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+
+		uploadDir := "./uploads"
+		os.MkdirAll(uploadDir, os.ModePerm)
+
+		filename := fmt.Sprintf("%d_%s", time.Now().UnixNano(), filepath.Base(handler.Filename))
+		filePath := filepath.Join(uploadDir, filename)
+
+		dst, err := os.Create(filePath)
+		if err != nil {
+			http.Error(w, "Unable to save the file", http.StatusInternalServerError)
+			return
+		}
+		defer dst.Close()
+
+		// Dosyayı kaydet
+		_, err = io.Copy(dst, file)
+		if err != nil {
+			http.Error(w, "Failed to save file", http.StatusInternalServerError)
+			return
+		}
+
+		photoURL := fmt.Sprintf("http://localhost:8080/uploads/%s", filename)
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"photoUrl":"%s"}`, photoURL)
 	}
 }

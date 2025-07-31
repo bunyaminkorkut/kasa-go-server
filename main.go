@@ -112,6 +112,10 @@ func main() {
 
 	http.Handle("/pay-group-expense", AuthMiddleware(handlePayGroupExpense(repo), repo))
 
+	fs := http.FileServer(http.Dir("./uploads"))
+	http.Handle("/uploads/", http.StripPrefix("/uploads/", fs))
+	http.Handle("/upload-photo", AuthMiddleware(uploadPhotoHandler(repo), repo))
+
 	fmt.Println("🚀 Sunucu 80 portunda başlatıldı...")
 	log.Fatal(http.ListenAndServe("0.0.0.0:8080", nil))
 }
