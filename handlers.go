@@ -977,7 +977,7 @@ func uploadPhotoHandler(repo *KasaRepository) http.HandlerFunc {
 			return
 		}
 
-		photoURL := fmt.Sprintf("http://kasa.bunyamin.app/uploads/%s", filename)
+		photoURL := fmt.Sprintf("https://kasa.bunyamin.app/uploads/%s", filename)
 
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"photoUrl":"%s"}`, photoURL)
