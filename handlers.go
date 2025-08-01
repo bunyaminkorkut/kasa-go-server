@@ -600,6 +600,16 @@ func handleAcceptAddRequest(repo *KasaRepository) http.HandlerFunc {
 				http.Error(w, "Grup bilgileri alınamadı", http.StatusInternalServerError)
 				return
 			}
+			// Bildirim gönder
+			notificationTitle := "Grup isteği kabul edildi"
+			notificationBody := fmt.Sprintf("%s kullanıcı isteğinizi kabul etti.", userUID.(string))
+
+			// Bildirimi asenkron gönder (istek gecikmesin diye)
+			go func() {
+				if err := SendNotification(r.Context(), repo, creatorID, notificationTitle, notificationBody); err != nil {
+					log.Printf("Bildirim gönderilemedi: %v", err)
+				}
+			}()
 
 			var members, requests, expenses, debts, credits []map[string]interface{}
 			_ = json.Unmarshal(membersJSON, &members)
@@ -748,6 +758,21 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 			http.Error(w, "Harcama oluşturulamadı: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
+
+		notificationTitle := "Yeni Harcama Eklendi"
+		notificationBody := fmt.Sprintf("'%s' başlıklı harcama oluşturuldu. Tutar: %.2f TL", req.PaymentTitle, req.TotalAmount)
+
+		go func() {
+			for _, user := range req.Users {
+				if user.UserID == userUID {
+					continue
+				}
+				err := SendNotification(r.Context(), repo, user.UserID, notificationTitle, notificationBody)
+				if err != nil {
+					log.Printf("Bildirim gönderilemedi (userID=%s): %v", user.UserID, err)
+				}
+			}
+		}()
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
@@ -935,13 +960,21 @@ func handlePayGroupExpense(repo *KasaRepository) http.HandlerFunc {
 			http.Error(w, "Harcama ödemesi başarısız", http.StatusInternalServerError)
 			return
 		}
+
+		title := "Harcama Ödendi"
+		body := fmt.Sprintf("%s tarafından bir harcama ödendi.", userUID.(string))
+		err = SendNotification(r.Context(), repo, req.SendedUserID, title, body)
+		if err != nil {
+			log.Printf("Bildirim gönderilemedi: %v", err)
+			// Bildirim başarısızlığı uygulamanın çalışmasını engellememeli
+		}
+
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
 			"message": "Harcama başarıyla ödendi",
 		})
 		log.Println("Harcama başarıyla ödendi:", req.SendedUserID)
-		defer r.Body.Close()
 	}
 }
 
