@@ -984,7 +984,7 @@ func uploadPhotoHandler(repo *KasaRepository) http.HandlerFunc {
 	}
 }
 
-func handleSaveAPNToken(repo *KasaRepository) http.HandlerFunc {
+func handleSaveFCMToken(repo *KasaRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Yalnızca POST metodu desteklenir", http.StatusMethodNotAllowed)
@@ -1007,21 +1007,21 @@ func handleSaveAPNToken(repo *KasaRepository) http.HandlerFunc {
 		defer r.Body.Close()
 
 		if req.Token == "" {
-			http.Error(w, "APN token zorunludur", http.StatusBadRequest)
+			http.Error(w, "FCM token zorunludur", http.StatusBadRequest)
 			return
 		}
 
-		err := repo.SaveAPNToken(userUID.(string), req.Token)
+		err := repo.SaveFCMToken(userUID.(string), req.Token)
 		if err != nil {
-			log.Println("APN token kaydetme hatası:", err)
-			http.Error(w, "APN token kaydedilemedi", http.StatusInternalServerError)
+			log.Println("FCM token kaydetme hatası:", err)
+			http.Error(w, "FCM token kaydedilemedi", http.StatusInternalServerError)
 			return
 		}
 
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
-			"message": "APN token başarıyla kaydedildi",
+			"message": "FCM token başarıyla kaydedildi",
 		})
 	}
 }

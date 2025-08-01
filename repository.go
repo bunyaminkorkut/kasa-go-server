@@ -705,19 +705,19 @@ func (repo *KasaRepository) PayGroupExpense(userID string, sendedUserID string, 
 	return nil
 }
 
-func (repo *KasaRepository) SaveAPNToken(userID string, token string) error {
+func (repo *KasaRepository) SaveFCMToken(userID string, token string) error {
 	query := `
-		INSERT INTO apn_table (user_id, apn_token)
+		INSERT INTO fcm_table (user_id, fcm_token)
 		VALUES (?, ?)
-		ON DUPLICATE KEY UPDATE apn_token = VALUES(apn_token)
+		ON DUPLICATE KEY UPDATE fcm_token = VALUES(fcm_token)
 	`
 	res, err := repo.DB.Exec(query, userID, token)
 	if err != nil {
-		log.Println("APN token kaydetme hatası:", err)
+		log.Println("FCM token kaydetme hatası:", err)
 		return err
 	}
 
 	rowsAffected, _ := res.RowsAffected()
-	log.Printf("APN token kayıt/güncelleme işlemi yapıldı. Etkilenen satır sayısı: %d\n", rowsAffected)
+	log.Printf("FCM token kayıt/güncelleme işlemi yapıldı. Etkilenen satır sayısı: %d\n", rowsAffected)
 	return nil
 }
