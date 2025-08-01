@@ -427,7 +427,11 @@ func SendAddRequest(repo *KasaRepository) http.HandlerFunc {
 		notificationTitle := "Yeni grup isteği"
 		notificationBody := fmt.Sprintf("%s sizi gruba eklemek istedi.", creatorName)
 
-		err = SendNotification(r.Context(), repo, userIDStr, notificationTitle, notificationBody)
+		data := map[string]string{
+			"type": "new_request",
+		}
+
+		err = SendNotification(r.Context(), repo, userIDStr, notificationTitle, notificationBody, data)
 		if err != nil {
 			log.Printf("Bildirim gönderilemedi: %v", err)
 		}
@@ -619,7 +623,7 @@ func handleAcceptAddRequest(repo *KasaRepository) http.HandlerFunc {
 
 			// Bildirimi asenkron gönder (istek gecikmesin diye)
 			go func() {
-				if err := SendNotification(r.Context(), repo, creatorID, notificationTitle, notificationBody); err != nil {
+				if err := SendNotification(r.Context(), repo, creatorID, notificationTitle, notificationBody, nil); err != nil {
 					log.Printf("Bildirim gönderilemedi: %v", err)
 				}
 			}()
@@ -780,7 +784,7 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 				if user.UserID == userUID {
 					continue
 				}
-				err := SendNotification(r.Context(), repo, user.UserID, notificationTitle, notificationBody)
+				err := SendNotification(r.Context(), repo, user.UserID, notificationTitle, notificationBody, nil)
 				if err != nil {
 					log.Printf("Bildirim gönderilemedi (userID=%s): %v", user.UserID, err)
 				}
@@ -976,7 +980,7 @@ func handlePayGroupExpense(repo *KasaRepository) http.HandlerFunc {
 
 		title := "Harcama Ödendi"
 		body := fmt.Sprintf("%s tarafından bir harcama ödendi.", userUID.(string))
-		err = SendNotification(r.Context(), repo, req.SendedUserID, title, body)
+		err = SendNotification(r.Context(), repo, req.SendedUserID, title, body, nil)
 		if err != nil {
 			log.Printf("Bildirim gönderilemedi: %v", err)
 			// Bildirim başarısızlığı uygulamanın çalışmasını engellememeli

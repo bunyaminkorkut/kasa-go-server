@@ -8,8 +8,7 @@ import (
 	"firebase.google.com/go/v4/messaging"
 )
 
-// SendNotification bildirim gönderme fonksiyonu
-func SendNotification(ctx context.Context, repo *KasaRepository, userID, title, body string) error {
+func SendNotification(ctx context.Context, repo *KasaRepository, userID, title, body string, data map[string]string) error {
 	if FirebaseMessagingClient == nil {
 		return fmt.Errorf("FirebaseMessagingClient initialize edilmemiş")
 	}
@@ -21,7 +20,6 @@ func SendNotification(ctx context.Context, repo *KasaRepository, userID, title, 
 	}
 
 	if userToken == "" {
-		// Token yoksa bildirim gönderme, sessizce çık
 		log.Printf("Kullanıcı (%s) için FCM token bulunamadı, bildirim gönderilmiyor.", userID)
 		return nil
 	}
@@ -34,6 +32,7 @@ func SendNotification(ctx context.Context, repo *KasaRepository, userID, title, 
 			Title: title,
 			Body:  body,
 		},
+		Data: data, // 🔥 Bildirimle birlikte yönlendirme verileri buraya
 		Android: &messaging.AndroidConfig{
 			Priority: "high",
 		},
