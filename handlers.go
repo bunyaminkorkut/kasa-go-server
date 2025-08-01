@@ -409,11 +409,13 @@ func SendAddRequest(repo *KasaRepository) http.HandlerFunc {
 			http.Error(w, "Veriler alınamadı", http.StatusInternalServerError)
 			return
 		}
+		id, _ := repo.GetUserByEmail(req.AddedMember)
+		userIDStr := fmt.Sprintf("%v", id) // Convert id to string
 
 		notificationTitle := "Yeni grup isteği"
 		notificationBody := fmt.Sprintf("%s sizi gruba eklemek istedi.", creatorName)
 
-		err = SendNotification(r.Context(), repo, req.AddedMember, notificationTitle, notificationBody)
+		err = SendNotification(r.Context(), repo, userIDStr, notificationTitle, notificationBody)
 		if err != nil {
 			log.Printf("Bildirim gönderilemedi: %v", err)
 			// Burada hata döndürmek yerine sadece loglayabiliriz
