@@ -404,13 +404,25 @@ func SendAddRequest(repo *KasaRepository) http.HandlerFunc {
 			&debtsJSON,
 			&creditsJSON,
 		)
+		rows, err := repo.GetUserByEmail(req.AddedMember)
 		if err != nil {
-			log.Printf("Veri okunurken hata: %v\n", err)
-			http.Error(w, "Veriler alınamadı", http.StatusInternalServerError)
+			log.Printf("Kullanıcı bulunamadı: %v", err)
 			return
 		}
-		id, _ := repo.GetUserByEmail(req.AddedMember)
-		userIDStr := fmt.Sprintf("%v", id) // Convert id to string
+		defer rows.Close()
+
+		var userID string
+		if rows.Next() {
+			if err := rows.Scan(&userID); err != nil {
+				log.Printf("Kullanıcı ID okunamadı: %v", err)
+				return
+			}
+		} else {
+			log.Println("Kullanıcı bulunamadı")
+			return
+		}
+
+		userIDStr := fmt.Sprintf("%v", userID)
 
 		notificationTitle := "Yeni grup isteği"
 		notificationBody := fmt.Sprintf("%s sizi gruba eklemek istedi.", creatorName)
@@ -418,7 +430,6 @@ func SendAddRequest(repo *KasaRepository) http.HandlerFunc {
 		err = SendNotification(r.Context(), repo, userIDStr, notificationTitle, notificationBody)
 		if err != nil {
 			log.Printf("Bildirim gönderilemedi: %v", err)
-			// Burada hata döndürmek yerine sadece loglayabiliriz
 		}
 
 		resp := map[string]interface{}{
