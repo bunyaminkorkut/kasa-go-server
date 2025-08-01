@@ -8,9 +8,14 @@ import (
 	"net/http"
 	"os"
 
+	"firebase.google.com/go/v4/auth"
+	"firebase.google.com/go/v4/messaging"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
 )
+
+var FirebaseMessagingClient *messaging.Client
+var FirebaseAuth *auth.Client
 
 func main() {
 	// .env dosyasını yükle
@@ -57,11 +62,12 @@ func main() {
 		}
 	}
 	fmt.Println("✅ SQL script başarıyla çalıştırıldı.")
-	firebaseAuth, err := connectToFirebase(context.Background())
+	clients, err := connectToFirebase(context.Background())
 	if err != nil {
 		log.Fatal("❌ Firebase bağlantısı başarısız:", err)
 	}
-	FirebaseAuth = firebaseAuth // middleware erişebilsin diye global değişkene ata
+	FirebaseAuth = clients.AuthClient
+	FirebaseMessagingClient = clients.MessagingClient
 
 	// Sunucu başlatma
 	repo := &KasaRepository{DB: db}

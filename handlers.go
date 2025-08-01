@@ -410,6 +410,15 @@ func SendAddRequest(repo *KasaRepository) http.HandlerFunc {
 			return
 		}
 
+		notificationTitle := "Yeni grup isteği"
+		notificationBody := fmt.Sprintf("%s sizi gruba eklemek istedi.", creatorName)
+
+		err = SendNotification(r.Context(), repo, req.AddedMember, notificationTitle, notificationBody)
+		if err != nil {
+			log.Printf("Bildirim gönderilemedi: %v", err)
+			// Burada hata döndürmek yerine sadece loglayabiliriz
+		}
+
 		resp := map[string]interface{}{
 			"id":         groupID,
 			"name":       groupName,

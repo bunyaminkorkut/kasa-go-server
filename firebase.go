@@ -11,17 +11,21 @@ import (
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/auth"
+	"firebase.google.com/go/v4/messaging"
 	"google.golang.org/api/option"
 )
 
-var FirebaseAuth *auth.Client
+type FirebaseClients struct {
+	AuthClient      *auth.Client
+	MessagingClient *messaging.Client
+}
 
 // FirebaseConfig yapısı FIREBASE_CONFIG JSON'undaki veriyi temsil eder
 type FirebaseConfig struct {
 	APIKey string `json:"apiKey"`
 }
 
-func connectToFirebase(ctx context.Context) (*auth.Client, error) {
+func connectToFirebase(ctx context.Context) (*FirebaseClients, error) {
 	credsFile := os.Getenv("FIREBASE_CREDENTIALS")
 	if credsFile == "" {
 		return nil, fmt.Errorf("❌ FIREBASE_CREDENTIALS .env içinde tanımlı değil")
@@ -38,7 +42,15 @@ func connectToFirebase(ctx context.Context) (*auth.Client, error) {
 		return nil, fmt.Errorf("❌ Firebase Auth başlatılamadı: %w", err)
 	}
 
-	return authClient, nil
+	messagingClient, err := app.Messaging(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("❌ Firebase Messaging başlatılamadı: %w", err)
+	}
+
+	return &FirebaseClients{
+		AuthClient:      authClient,
+		MessagingClient: messagingClient,
+	}, nil
 }
 
 func CreateFirebaseUser(email, password string) (string, error) {

@@ -721,3 +721,22 @@ func (repo *KasaRepository) SaveFCMToken(userID string, token string) error {
 	log.Printf("FCM token kayıt/güncelleme işlemi yapıldı. Etkilenen satır sayısı: %d\n", rowsAffected)
 	return nil
 }
+
+func (r *KasaRepository) GetFCMTokenByUserID(ctx context.Context, userID string) (string, error) {
+	var token sql.NullString
+
+	query := `SELECT fcm_token FROM fcm_table WHERE user_id = ? LIMIT 1`
+	err := r.DB.QueryRowContext(ctx, query, userID).Scan(&token)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// Kayıt yok, null döndür
+			return "", nil
+		}
+		return "", fmt.Errorf("FCM token sorgulanırken hata: %w", err)
+	}
+
+	if token.Valid {
+		return token.String, nil
+	}
+	return "", nil
+}
