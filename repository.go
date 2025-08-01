@@ -704,3 +704,20 @@ func (repo *KasaRepository) PayGroupExpense(userID string, sendedUserID string, 
 	log.Printf("Harcama ödendi: userID=%s, sendedUserID=%s, groupID=%d", userID, sendedUserID, groupID)
 	return nil
 }
+
+func (repo *KasaRepository) SaveAPNToken(userID string, token string) error {
+	query := `
+		INSERT INTO apn_table (user_id, apn_token)
+		VALUES (?, ?)
+		ON DUPLICATE KEY UPDATE apn_token = VALUES(apn_token)
+	`
+	res, err := repo.DB.Exec(query, userID, token)
+	if err != nil {
+		log.Println("APN token kaydetme hatası:", err)
+		return err
+	}
+
+	rowsAffected, _ := res.RowsAffected()
+	log.Printf("APN token kayıt/güncelleme işlemi yapıldı. Etkilenen satır sayısı: %d\n", rowsAffected)
+	return nil
+}

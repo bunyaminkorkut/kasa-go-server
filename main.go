@@ -112,6 +112,8 @@ func main() {
 
 	http.Handle("/pay-group-expense", AuthMiddleware(handlePayGroupExpense(repo), repo))
 
+	http.Handle("/save-apn-token", AuthMiddleware(handleSaveAPNToken(repo), repo))
+
 	fs := http.FileServer(http.Dir("./uploads"))
 	http.Handle("/uploads/", http.StripPrefix("/uploads/", fs))
 	http.Handle("/upload-photo", AuthMiddleware(uploadPhotoHandler(repo), repo))

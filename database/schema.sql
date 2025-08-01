@@ -57,3 +57,12 @@ CREATE TABLE IF NOT EXISTS group_expense_participants (
     FOREIGN KEY (expense_id) REFERENCES group_expenses(expense_id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS apn_table (
+    user_id VARCHAR(255) PRIMARY KEY,
+    apn_token TEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+

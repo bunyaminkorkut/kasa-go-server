@@ -983,3 +983,45 @@ func uploadPhotoHandler(repo *KasaRepository) http.HandlerFunc {
 		fmt.Fprintf(w, `{"photoUrl":"%s"}`, photoURL)
 	}
 }
+
+func handleSaveAPNToken(repo *KasaRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Yalnızca POST metodu desteklenir", http.StatusMethodNotAllowed)
+			return
+		}
+
+		userUID := r.Context().Value("userUID")
+		if userUID == nil {
+			http.Error(w, "Yetkisiz erişim", http.StatusUnauthorized)
+			return
+		}
+
+		var req struct {
+			Token string `json:"token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Geçersiz JSON formatı", http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+
+		if req.Token == "" {
+			http.Error(w, "APN token zorunludur", http.StatusBadRequest)
+			return
+		}
+
+		err := repo.SaveAPNToken(userUID.(string), req.Token)
+		if err != nil {
+			log.Println("APN token kaydetme hatası:", err)
+			http.Error(w, "APN token kaydedilemedi", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"message": "APN token başarıyla kaydedildi",
+		})
+	}
+}
