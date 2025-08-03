@@ -245,11 +245,16 @@ func CreateGroupHandler(repo *KasaRepository) http.HandlerFunc {
 			_ = json.Unmarshal(creditsJSON, &credits)
 
 			groups = append(groups, map[string]interface{}{
-				"id":          groupID,
-				"group_token": groupToken,
-				"name":        groupName,
-				"created_at":  createdAt,
-				"is_admin":    creatorID == userUID,
+				"id": groupID,
+				"group_token": func() interface{} {
+					if groupToken.Valid {
+						return groupToken.String
+					}
+					return nil
+				}(),
+				"name":       groupName,
+				"created_at": createdAt,
+				"is_admin":   creatorID == userUID,
 				"creator": map[string]interface{}{
 					"id":       creatorID,
 					"fullname": creatorName,
@@ -329,11 +334,16 @@ func GetGroups(repo *KasaRepository) http.HandlerFunc {
 			_ = json.Unmarshal(creditsJSON, &credits)
 
 			groups = append(groups, map[string]interface{}{
-				"id":          groupID,
-				"group_token": groupToken,
-				"name":        groupName,
-				"created_at":  createdAt,
-				"is_admin":    creatorID == userUID.(string),
+				"id": groupID,
+				"group_token": func() interface{} {
+					if groupToken.Valid {
+						return groupToken.String
+					}
+					return nil
+				}(),
+				"name":       groupName,
+				"created_at": createdAt,
+				"is_admin":   creatorID == userUID.(string),
 				"creator": map[string]interface{}{
 					"id":       creatorID,
 					"fullname": creatorName,
@@ -452,11 +462,16 @@ func SendAddRequest(repo *KasaRepository) http.HandlerFunc {
 		}
 
 		resp := map[string]interface{}{
-			"id":          groupID,
-			"group_token": groupToken,
-			"name":        groupName,
-			"created_at":  createdTS,
-			"is_admin":    creatorID == userUID.(string),
+			"id": groupID,
+			"group_token": func() interface{} {
+				if groupToken.Valid {
+					return groupToken.String
+				}
+				return nil
+			}(),
+			"name":       groupName,
+			"created_at": createdTS,
+			"is_admin":   creatorID == userUID.(string),
 			"creator": map[string]interface{}{
 				"id":       creatorID,
 				"fullname": creatorName,
@@ -654,11 +669,16 @@ func handleAcceptAddRequest(repo *KasaRepository) http.HandlerFunc {
 			_ = json.Unmarshal(creditsJSON, &credits)
 
 			groups = append(groups, map[string]interface{}{
-				"id":          groupID,
-				"group_token": groupToken,
-				"name":        groupName,
-				"created_at":  createdAt,
-				"is_admin":    creatorID == userUID.(string),
+				"id": groupID,
+				"group_token": func() interface{} {
+					if groupToken.Valid {
+						return groupToken.String
+					}
+					return nil
+				}(),
+				"name":       groupName,
+				"created_at": createdAt,
+				"is_admin":   creatorID == userUID.(string),
 				"creator": map[string]interface{}{
 					"id":       creatorID,
 					"fullname": creatorName,
@@ -1187,11 +1207,16 @@ func addGroupWithTokenHandler(repo *KasaRepository) http.HandlerFunc {
 			_ = json.Unmarshal(creditsJSON, &credits)
 
 			groups = append(groups, map[string]interface{}{
-				"id":          groupID,
-				"group_token": groupToken,
-				"name":        groupName,
-				"created_at":  createdAt,
-				"is_admin":    creatorID == userUID,
+				"id": groupID,
+				"group_token": func() interface{} {
+					if groupToken.Valid {
+						return groupToken.String
+					}
+					return nil
+				}(),
+				"name":       groupName,
+				"created_at": createdAt,
+				"is_admin":   creatorID == userUID,
 				"creator": map[string]interface{}{
 					"id":       creatorID,
 					"fullname": creatorName,
