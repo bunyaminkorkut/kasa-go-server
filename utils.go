@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/rand"
 	"errors"
+	"math/big"
 	"os"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -40,4 +42,18 @@ func decodeJWTWithoutValidation(tokenStr string) (map[string]interface{}, error)
 		return claims, nil
 	}
 	return nil, errors.New("invalid claims")
+}
+
+const tokenChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+func generateToken(length int) (string, error) {
+	token := ""
+	for i := 0; i < length; i++ {
+		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(tokenChars))))
+		if err != nil {
+			return "", err
+		}
+		token += string(tokenChars[num.Int64()])
+	}
+	return token, nil
 }

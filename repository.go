@@ -18,8 +18,8 @@ func (repo *KasaRepository) CreateUser(id, username, email, hashedPassword strin
 	return err
 }
 
-func (repo *KasaRepository) CreateGroup(creatorID, groupName string) (int64, error) {
-	result, err := repo.DB.Exec("INSERT INTO groups (group_name, creator_id) VALUES (?, ?)", groupName, creatorID)
+func (repo *KasaRepository) CreateGroup(creatorID, groupName string, groupToken string) (int64, error) {
+	result, err := repo.DB.Exec("INSERT INTO groups (group_name, creator_id, group_token) VALUES (?, ?, ?)", groupName, creatorID, groupToken)
 	if err != nil {
 		log.Println("Grup oluşturma hatası:", err)
 		return 0, err
@@ -47,6 +47,7 @@ func (repo *KasaRepository) getMyGroups(userID string) (*sql.Rows, error) {
 	return repo.DB.Query(`
 		SELECT 
 			g.id AS group_id,
+			g.group_token AS group_token,
 			g.group_name,
 			UNIX_TIMESTAMP(g.created_at) AS created_ts,
 			u.id AS creator_id,
@@ -212,6 +213,7 @@ func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail, curre
 	row := repo.DB.QueryRow(`
 		SELECT 
 			g.id AS group_id,
+			g.group_token AS group_token,
 			g.group_name,
 			UNIX_TIMESTAMP(g.created_at) AS created_ts,
 			u.id AS creator_id,
@@ -739,4 +741,15 @@ func (r *KasaRepository) GetFCMTokenByUserID(ctx context.Context, userID string)
 		return token.String, nil
 	}
 	return "", nil
+}
+
+func (repo *KasaRepository) addUserToGroupWithToken(userID string, groupToken string) (*sql.Row, error) {
+	row := repo.DB.QueryRow(`
+		INSERT INTO group_members (group_id, user_id)
+		SELECT g.id, ?
+		FROM groups g
+		WHERE g.group_token = ?
+		ON DUPLICATE KEY UPDATE user_id = user_id
+	`, userID, groupToken)
+	return row, nil
 }

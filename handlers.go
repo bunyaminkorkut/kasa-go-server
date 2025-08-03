@@ -186,8 +186,15 @@ func CreateGroupHandler(repo *KasaRepository) http.HandlerFunc {
 			return
 		}
 
-		// Grup oluştur
-		_, err := repo.CreateGroup(userUID, req.GroupName)
+		groupToken, err := generateToken(8)
+		if err != nil {
+			log.Println("Token oluşturulamadı:", err)
+			http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
+			return
+		}
+		groupToken += fmt.Sprintf("%d", time.Now().Unix())
+
+		_, err = repo.CreateGroup(userUID, req.GroupName, groupToken)
 		if err != nil {
 			log.Println("Grup oluşturulamadı:", err)
 			http.Error(w, "Grup oluşturulamadı", http.StatusInternalServerError)
@@ -206,12 +213,14 @@ func CreateGroupHandler(repo *KasaRepository) http.HandlerFunc {
 		var groups []map[string]interface{}
 		for rows.Next() {
 			var groupID int64
+			var groupToken string
 			var groupName, creatorID, creatorName, creatorEmail string
 			var createdAt int64
 			var membersJSON, requestsJSON, expensesJSON, debtsJSON, creditsJSON []byte
 
 			if err := rows.Scan(
 				&groupID,
+				&groupToken,
 				&groupName,
 				&createdAt,
 				&creatorID,
@@ -236,10 +245,11 @@ func CreateGroupHandler(repo *KasaRepository) http.HandlerFunc {
 			_ = json.Unmarshal(creditsJSON, &credits)
 
 			groups = append(groups, map[string]interface{}{
-				"id":         groupID,
-				"name":       groupName,
-				"created_at": createdAt,
-				"is_admin":   creatorID == userUID,
+				"id":          groupID,
+				"group_token": groupToken,
+				"name":        groupName,
+				"created_at":  createdAt,
+				"is_admin":    creatorID == userUID,
 				"creator": map[string]interface{}{
 					"id":       creatorID,
 					"fullname": creatorName,
@@ -287,12 +297,14 @@ func GetGroups(repo *KasaRepository) http.HandlerFunc {
 		var groups []map[string]interface{}
 		for rows.Next() {
 			var groupID int64
+			var groupToken string
 			var groupName, creatorID, creatorName, creatorEmail string
 			var createdAt int64
 			var membersJSON, requestsJSON, expensesJSON, debtsJSON, creditsJSON []byte
 
 			if err := rows.Scan(
 				&groupID,
+				&groupToken,
 				&groupName,
 				&createdAt,
 				&creatorID,
@@ -317,10 +329,11 @@ func GetGroups(repo *KasaRepository) http.HandlerFunc {
 			_ = json.Unmarshal(creditsJSON, &credits)
 
 			groups = append(groups, map[string]interface{}{
-				"id":         groupID,
-				"name":       groupName,
-				"created_at": createdAt,
-				"is_admin":   creatorID == userUID.(string),
+				"id":          groupID,
+				"group_token": groupToken,
+				"name":        groupName,
+				"created_at":  createdAt,
+				"is_admin":    creatorID == userUID.(string),
 				"creator": map[string]interface{}{
 					"id":       creatorID,
 					"fullname": creatorName,
@@ -379,6 +392,7 @@ func SendAddRequest(repo *KasaRepository) http.HandlerFunc {
 
 		var (
 			groupID      int
+			groupToken   string
 			groupName    string
 			createdTS    int64
 			creatorID    string
@@ -393,6 +407,7 @@ func SendAddRequest(repo *KasaRepository) http.HandlerFunc {
 
 		err = row.Scan(
 			&groupID,
+			&groupToken,
 			&groupName,
 			&createdTS,
 			&creatorID,
@@ -437,10 +452,11 @@ func SendAddRequest(repo *KasaRepository) http.HandlerFunc {
 		}
 
 		resp := map[string]interface{}{
-			"id":         groupID,
-			"name":       groupName,
-			"created_at": createdTS,
-			"is_admin":   creatorID == userUID.(string),
+			"id":          groupID,
+			"group_token": groupToken,
+			"name":        groupName,
+			"created_at":  createdTS,
+			"is_admin":    creatorID == userUID.(string),
 			"creator": map[string]interface{}{
 				"id":       creatorID,
 				"fullname": creatorName,
@@ -596,12 +612,14 @@ func handleAcceptAddRequest(repo *KasaRepository) http.HandlerFunc {
 		var groups []map[string]interface{}
 		for rows.Next() {
 			var groupID int64
+			var groupToken string
 			var groupName, creatorID, creatorName, creatorEmail string
 			var createdAt int64
 			var membersJSON, requestsJSON, expensesJSON, debtsJSON, creditsJSON []byte
 
 			if err := rows.Scan(
 				&groupID,
+				&groupToken,
 				&groupName,
 				&createdAt,
 				&creatorID,
@@ -636,10 +654,11 @@ func handleAcceptAddRequest(repo *KasaRepository) http.HandlerFunc {
 			_ = json.Unmarshal(creditsJSON, &credits)
 
 			groups = append(groups, map[string]interface{}{
-				"id":         groupID,
-				"name":       groupName,
-				"created_at": createdAt,
-				"is_admin":   creatorID == userUID.(string),
+				"id":          groupID,
+				"group_token": groupToken,
+				"name":        groupName,
+				"created_at":  createdAt,
+				"is_admin":    creatorID == userUID.(string),
 				"creator": map[string]interface{}{
 					"id":       creatorID,
 					"fullname": creatorName,
@@ -1082,5 +1101,121 @@ func handleSaveFCMToken(repo *KasaRepository) http.HandlerFunc {
 		json.NewEncoder(w).Encode(map[string]string{
 			"message": "FCM token başarıyla kaydedildi",
 		})
+	}
+}
+
+func addGroupWithTokenHandler(repo *KasaRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Yalnızca POST metodu desteklenir", http.StatusMethodNotAllowed)
+			return
+		}
+
+		userUID := r.Context().Value("userUID")
+		if userUID == nil {
+			http.Error(w, "Yetkisiz erişim", http.StatusUnauthorized)
+			return
+		}
+
+		var req struct {
+			GroupToken string `json:"group_token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Geçersiz JSON formatı", http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+
+		if req.GroupToken == "" {
+			http.Error(w, "group_token zorunludur", http.StatusBadRequest)
+			return
+		}
+
+		var newGroupID int64
+		row, err := repo.addUserToGroupWithToken(userUID.(string), req.GroupToken)
+		if err != nil {
+			log.Println("Grup ekleme hatası:", err)
+			http.Error(w, "Grup eklenemedi", http.StatusInternalServerError)
+			return
+		}
+		if err := row.Scan(&newGroupID); err != nil {
+			log.Println("Grup ID okunamadı:", err)
+			http.Error(w, "Grup ID okunamadı", http.StatusInternalServerError)
+			return
+		}
+
+		rows, err := repo.getMyGroups(userUID.(string))
+		if err != nil {
+			log.Println("Grup bilgileri alınamadı:", err)
+			http.Error(w, "Grup bilgileri alınamadı", http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		var groups []map[string]interface{}
+		for rows.Next() {
+			var groupID int64
+			var groupToken string
+			var groupName, creatorID, creatorName, creatorEmail string
+			var createdAt int64
+			var membersJSON, requestsJSON, expensesJSON, debtsJSON, creditsJSON []byte
+
+			if err := rows.Scan(
+				&groupID,
+				&groupToken,
+				&groupName,
+				&createdAt,
+				&creatorID,
+				&creatorName,
+				&creatorEmail,
+				&membersJSON,
+				&requestsJSON,
+				&expensesJSON,
+				&debtsJSON,
+				&creditsJSON,
+			); err != nil {
+				log.Println("Satır okunamadı:", err)
+				http.Error(w, "Grup bilgileri alınamadı", http.StatusInternalServerError)
+				return
+			}
+
+			var members, requests, expenses, debts, credits []map[string]interface{}
+			_ = json.Unmarshal(membersJSON, &members)
+			_ = json.Unmarshal(requestsJSON, &requests)
+			_ = json.Unmarshal(expensesJSON, &expenses)
+			_ = json.Unmarshal(debtsJSON, &debts)
+			_ = json.Unmarshal(creditsJSON, &credits)
+
+			groups = append(groups, map[string]interface{}{
+				"id":          groupID,
+				"group_token": groupToken,
+				"name":        groupName,
+				"created_at":  createdAt,
+				"is_admin":    creatorID == userUID,
+				"creator": map[string]interface{}{
+					"id":       creatorID,
+					"fullname": creatorName,
+					"email":    creatorEmail,
+				},
+				"members":          members,
+				"pending_requests": requests,
+				"expenses":         expenses,
+				"debts":            debts,
+				"credits":          credits,
+			})
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated) // Status code'u burda set et
+
+		if err := json.NewEncoder(w).Encode(
+			map[string]interface{}{
+				"message":      "Grup başarıyla eklendi",
+				"new_group_id": newGroupID,
+				"groups":       groups,
+			},
+		); err != nil {
+			log.Println("Yanıt gönderilemedi:", err)
+		}
 	}
 }

@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS groups (
     group_name VARCHAR(100) NOT NULL,
     creator_id VARCHAR(100) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    group_token VARCHAR(255) NOT NULL UNIQUE,
     FOREIGN KEY (creator_id) REFERENCES users(id)
 );
 

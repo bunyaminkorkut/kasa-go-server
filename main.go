@@ -120,6 +120,8 @@ func main() {
 
 	http.Handle("/save-fcm-token", AuthMiddleware(handleSaveFCMToken(repo), repo))
 
+	http.Handle("/add-group-token", AuthMiddleware(addGroupWithTokenHandler(repo), repo))
+
 	fs := http.FileServer(http.Dir("./uploads"))
 	http.Handle("/uploads/", http.StripPrefix("/uploads/", fs))
 	http.Handle("/upload-photo", AuthMiddleware(uploadPhotoHandler(repo), repo))
