@@ -213,7 +213,7 @@ func CreateGroupHandler(repo *KasaRepository) http.HandlerFunc {
 		var groups []map[string]interface{}
 		for rows.Next() {
 			var groupID int64
-			var groupToken string
+			var groupToken sql.NullString
 			var groupName, creatorID, creatorName, creatorEmail string
 			var createdAt int64
 			var membersJSON, requestsJSON, expensesJSON, debtsJSON, creditsJSON []byte
@@ -297,7 +297,7 @@ func GetGroups(repo *KasaRepository) http.HandlerFunc {
 		var groups []map[string]interface{}
 		for rows.Next() {
 			var groupID int64
-			var groupToken string
+			var groupToken sql.NullString
 			var groupName, creatorID, creatorName, creatorEmail string
 			var createdAt int64
 			var membersJSON, requestsJSON, expensesJSON, debtsJSON, creditsJSON []byte
@@ -392,7 +392,7 @@ func SendAddRequest(repo *KasaRepository) http.HandlerFunc {
 
 		var (
 			groupID      int
-			groupToken   string
+			groupToken   sql.NullString
 			groupName    string
 			createdTS    int64
 			creatorID    string
@@ -612,7 +612,7 @@ func handleAcceptAddRequest(repo *KasaRepository) http.HandlerFunc {
 		var groups []map[string]interface{}
 		for rows.Next() {
 			var groupID int64
-			var groupToken string
+			var groupToken sql.NullString
 			var groupName, creatorID, creatorName, creatorEmail string
 			var createdAt int64
 			var membersJSON, requestsJSON, expensesJSON, debtsJSON, creditsJSON []byte
@@ -1155,7 +1155,7 @@ func addGroupWithTokenHandler(repo *KasaRepository) http.HandlerFunc {
 		var groups []map[string]interface{}
 		for rows.Next() {
 			var groupID int64
-			var groupToken string
+			var groupToken sql.NullString
 			var groupName, creatorID, creatorName, creatorEmail string
 			var createdAt int64
 			var membersJSON, requestsJSON, expensesJSON, debtsJSON, creditsJSON []byte
