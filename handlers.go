@@ -1152,15 +1152,10 @@ func addGroupWithTokenHandler(repo *KasaRepository) http.HandlerFunc {
 		}
 
 		var newGroupID int64
-		row, err := repo.addUserToGroupWithToken(userUID.(string), req.GroupToken)
+		newGroupID, err := repo.addUserToGroupWithToken(userUID.(string), req.GroupToken)
 		if err != nil {
 			log.Println("Grup ekleme hatası:", err)
-			http.Error(w, "Grup eklenemedi", http.StatusInternalServerError)
-			return
-		}
-		if err := row.Scan(&newGroupID); err != nil {
-			log.Println("Grup ID okunamadı:", err)
-			http.Error(w, "Grup ID okunamadı", http.StatusInternalServerError)
+			http.Error(w, "Gruba eklenemedi", http.StatusInternalServerError)
 			return
 		}
 

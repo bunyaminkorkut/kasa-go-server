@@ -743,13 +743,26 @@ func (r *KasaRepository) GetFCMTokenByUserID(ctx context.Context, userID string)
 	return "", nil
 }
 
-func (repo *KasaRepository) addUserToGroupWithToken(userID string, groupToken string) (*sql.Row, error) {
-	row := repo.DB.QueryRow(`
+func (repo *KasaRepository) addUserToGroupWithToken(userID string, groupToken string) (int64, error) {
+	var groupID int64
+
+	// 1. Group ID'yi token'dan bul
+	err := repo.DB.QueryRow(`
+		SELECT id FROM groups WHERE group_token = ?
+	`, groupToken).Scan(&groupID)
+	if err != nil {
+		return 0, fmt.Errorf("group not found: %w", err)
+	}
+
+	// 2. Kullanıcıyı bu gruba ekle (zaten varsa ekleme)
+	_, err = repo.DB.Exec(`
 		INSERT INTO group_members (group_id, user_id)
-		SELECT g.id, ?
-		FROM groups g
-		WHERE g.group_token = ?
+		VALUES (?, ?)
 		ON DUPLICATE KEY UPDATE user_id = user_id
-	`, userID, groupToken)
-	return row, nil
+	`, groupID, userID)
+	if err != nil {
+		return 0, fmt.Errorf("insert failed: %w", err)
+	}
+
+	return groupID, nil
 }
