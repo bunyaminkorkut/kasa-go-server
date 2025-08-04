@@ -823,12 +823,7 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 				if user.UserID == userUID {
 					continue
 				}
-				userData, err := repo.GetUserByID(user.UserID)
-				if err != nil {
-					log.Printf("Kullanıcı bulunamadı (userID=%s): %v", user.UserID, err)
-					continue
-				}
-				err = SendNotification(r.Context(), repo, userData.FullName, notificationTitle, notificationBody, nil)
+				err = SendNotification(r.Context(), repo, user.UserID, notificationTitle, notificationBody, nil)
 				if err != nil {
 					log.Printf("Bildirim gönderilemedi (userID=%s): %v", user.UserID, err)
 				}
