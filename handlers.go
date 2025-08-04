@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -823,7 +824,11 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 				if user.UserID == userUID {
 					continue
 				}
-				err = SendNotification(r.Context(), repo, user.UserID, notificationTitle, notificationBody, nil)
+
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+
+				err := SendNotification(ctx, repo, user.UserID, notificationTitle, notificationBody, nil)
 				if err != nil {
 					log.Printf("Bildirim gönderilemedi (userID=%s): %v", user.UserID, err)
 				}
