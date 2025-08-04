@@ -1031,7 +1031,7 @@ func handlePayGroupExpense(repo *KasaRepository) http.HandlerFunc {
 			return
 		}
 
-		err = SendNotification(r.Context(), repo, sentUser.FullName, title, body, nil)
+		err = SendNotification(r.Context(), repo, sentUser.ID, title, body, nil)
 		if err != nil {
 			log.Printf("Bildirim gönderilemedi: %v", err)
 			// Bildirim başarısızlığı uygulamanın çalışmasını engellememeli
