@@ -823,7 +823,12 @@ func handleCreateGroupExpense(repo *KasaRepository) http.HandlerFunc {
 				if user.UserID == userUID {
 					continue
 				}
-				err := SendNotification(r.Context(), repo, user.UserID, notificationTitle, notificationBody, nil)
+				userData, err := repo.GetUserByID(user.UserID)
+				if err != nil {
+					log.Printf("Kullanıcı bulunamadı (userID=%s): %v", user.UserID, err)
+					continue
+				}
+				err = SendNotification(r.Context(), repo, userData.FullName, notificationTitle, notificationBody, nil)
 				if err != nil {
 					log.Printf("Bildirim gönderilemedi (userID=%s): %v", user.UserID, err)
 				}
@@ -1019,7 +1024,14 @@ func handlePayGroupExpense(repo *KasaRepository) http.HandlerFunc {
 
 		title := "Harcama Ödendi"
 		body := fmt.Sprintf("%s tarafından bir harcama ödendi.", userUID.(string))
-		err = SendNotification(r.Context(), repo, req.SendedUserID, title, body, nil)
+		sentUser, err := repo.GetUserByID(req.SendedUserID)
+		if err != nil {
+			log.Printf("Kullanıcı bulunamadı: %v", err)
+			http.Error(w, "Kullanıcı bulunamadı", http.StatusNotFound)
+			return
+		}
+
+		err = SendNotification(r.Context(), repo, sentUser.FullName, title, body, nil)
 		if err != nil {
 			log.Printf("Bildirim gönderilemedi: %v", err)
 			// Bildirim başarısızlığı uygulamanın çalışmasını engellememeli
