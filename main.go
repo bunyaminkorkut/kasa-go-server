@@ -122,6 +122,8 @@ func main() {
 
 	http.Handle("/add-group-token", AuthMiddleware(addGroupWithTokenHandler(repo), repo))
 
+	http.Handle("/delete-expense", AuthMiddleware(handleDeleteExpense(repo), repo))
+
 	fs := http.FileServer(http.Dir("./uploads"))
 	http.Handle("/uploads/", http.StripPrefix("/uploads/", fs))
 	http.Handle("/upload-photo", AuthMiddleware(uploadPhotoHandler(repo), repo))

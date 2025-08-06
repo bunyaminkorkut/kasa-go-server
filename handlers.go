@@ -1251,3 +1251,58 @@ func addGroupWithTokenHandler(repo *KasaRepository) http.HandlerFunc {
 		}
 	}
 }
+
+func handleDeleteExpense(repo *KasaRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			http.Error(w, "Yalnızca DELETE metodu desteklenir", http.StatusMethodNotAllowed)
+			return
+		}
+
+		userUID := r.Context().Value("userUID")
+		if userUID == nil {
+			http.Error(w, "Yetkisiz erişim", http.StatusUnauthorized)
+			return
+		}
+
+		var req struct {
+			ExpenseID int64 `json:"expense_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Geçersiz JSON formatı", http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+
+		if req.ExpenseID <= 0 {
+			http.Error(w, "Geçersiz harcama ID'si", http.StatusBadRequest)
+			return
+		}
+
+		// Create a transaction for the delete operation
+		tx, err := repo.DB.BeginTx(r.Context(), nil)
+		if err != nil {
+			log.Println("Veritabanı transaction başlatılamadı:", err)
+			http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
+			return
+		}
+
+		expenseRes, err := repo.deleteGroupExpense(r.Context(), tx, userUID.(string), req.ExpenseID)
+		if err != nil {
+			tx.Rollback()
+			log.Println("Harcama silme hatası:", err)
+			http.Error(w, "Harcama silinemedi", http.StatusInternalServerError)
+			return
+		}
+
+		if err := tx.Commit(); err != nil {
+			log.Println("Transaction commit hatası:", err)
+			http.Error(w, "Sunucu hatası", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(expenseRes)
+	}
+}

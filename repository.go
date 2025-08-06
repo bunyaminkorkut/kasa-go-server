@@ -766,3 +766,140 @@ func (repo *KasaRepository) addUserToGroupWithToken(userID string, groupToken st
 
 	return groupID, nil
 }
+
+func (repo *KasaRepository) deleteGroupExpense(
+	ctx context.Context,
+	tx *sql.Tx,
+	userID string,
+	expenseID int64,
+) (*ExpenseWithParticipantsAndBalances, error) {
+
+	// Harcama bilgilerini ve creator_id'yi çek
+	var expense ExpenseWithParticipants
+	var participantsRaw sql.NullString
+	var paymentDateUnix int64
+	var creatorID string
+
+	txErr := tx.QueryRowContext(ctx, `
+		SELECT
+			e.expense_id, e.group_id, e.payer_id, u.fullname AS payer_name,
+			e.amount, e.description_note, e.payment_title, UNIX_TIMESTAMP(e.payment_date), e.bill_image_url,
+			g.creator_id,
+			(
+				SELECT JSON_ARRAYAGG(JSON_OBJECT(
+					'user_id', ep.user_id,
+					'user_name', uu.fullname,
+					'amount_share', ep.amount_share,
+					'payment_status', ep.payment_status
+				))
+				FROM group_expense_participants ep
+				LEFT JOIN users uu ON uu.id = ep.user_id
+				WHERE ep.expense_id = e.expense_id
+			) AS participants
+		FROM group_expenses e
+		LEFT JOIN users u ON u.id = e.payer_id
+		JOIN groups g ON g.id = e.group_id
+		WHERE e.expense_id = ?
+	`, expenseID).Scan(
+		&expense.ExpenseID,
+		&expense.GroupID,
+		&expense.PayerID,
+		&expense.PayerName,
+		&expense.Amount,
+		&expense.DescriptionNote,
+		&expense.PaymentTitle,
+		&paymentDateUnix,
+		&expense.BillImageURL,
+		&creatorID,
+		&participantsRaw,
+	)
+	if txErr != nil {
+		return nil, fmt.Errorf("harcama bilgileri alınamadı: %w", txErr)
+	}
+	expense.PaymentDate = paymentDateUnix
+	expense.Participants = []byte("[]")
+	if participantsRaw.Valid && participantsRaw.String != "" {
+		expense.Participants = json.RawMessage(participantsRaw.String)
+	}
+
+	// 🛡️ Yetki kontrolü: user, payer veya grup sahibi mi?
+	if userID != expense.PayerID && userID != creatorID {
+		return nil, fmt.Errorf("yetkisiz işlem: sadece grup sahibi veya harcamayı yapan kişi silebilir")
+	}
+
+	// ❌ Katılımcıları sil
+	_, txErr = tx.ExecContext(ctx, `
+		DELETE FROM group_expense_participants
+		WHERE expense_id = ?
+	`, expenseID)
+	if txErr != nil {
+		return nil, fmt.Errorf("katılımcılar silinemedi: %w", txErr)
+	}
+
+	// ❌ Harcamayı sil
+	_, txErr = tx.ExecContext(ctx, `
+		DELETE FROM group_expenses
+		WHERE expense_id = ?
+	`, expenseID)
+	if txErr != nil {
+		return nil, fmt.Errorf("harcama silinemedi: %w", txErr)
+	}
+
+	// 📊 Borç/alacak hesapla (kullanıcının yeni durumu için)
+	var debtsRaw, creditsRaw sql.NullString
+
+	txErr = tx.QueryRowContext(ctx, `
+		SELECT 
+			(
+				SELECT JSON_ARRAYAGG(
+					JSON_OBJECT(
+						'user_id', e.payer_id,
+						'username', payer.fullname,
+						'iban', payer.iban,
+						'amount', p.amount_share,
+						'status', p.payment_status,
+						'expenses', JSON_ARRAY(p.expense_id)
+					)
+				)
+				FROM group_expense_participants p
+				JOIN group_expenses e ON p.expense_id = e.expense_id
+				JOIN users payer ON payer.id = e.payer_id
+				WHERE p.user_id = ? AND e.payer_id != p.user_id AND e.group_id = ?
+			) AS debts,
+			(
+				SELECT JSON_ARRAYAGG(
+					JSON_OBJECT(
+						'user_id', p.user_id,
+						'username', u.fullname,
+						'iban', u.iban,
+						'amount', p.amount_share,
+						'status', p.payment_status,
+						'expenses', JSON_ARRAY(p.expense_id)
+					)
+				)
+				FROM group_expenses e
+				JOIN group_expense_participants p ON e.expense_id = p.expense_id
+				JOIN users u ON u.id = p.user_id
+				WHERE e.payer_id = ? AND p.user_id != e.payer_id AND e.group_id = ?
+			) AS credits
+	`, userID, expense.GroupID, userID, expense.GroupID).Scan(&debtsRaw, &creditsRaw)
+	if txErr != nil {
+		return nil, fmt.Errorf("borç/alacak bilgileri alınamadı: %w", txErr)
+	}
+
+	// JSON dönüşümleri
+	debts := []byte("[]")
+	if debtsRaw.Valid && debtsRaw.String != "" {
+		debts = json.RawMessage(debtsRaw.String)
+	}
+	credits := []byte("[]")
+	if creditsRaw.Valid && creditsRaw.String != "" {
+		credits = json.RawMessage(creditsRaw.String)
+	}
+
+	return &ExpenseWithParticipantsAndBalances{
+		Expense: expense,
+		Debts:   debts,
+		Credits: credits,
+	}, nil
+}
