@@ -508,9 +508,6 @@ func (repo *KasaRepository) createGroupExpense(ctx context.Context, payerID stri
 		}
 		sum += *u.Amount
 	}
-	if sum != req.TotalAmount {
-		return nil, fmt.Errorf("tutar eşleşmiyor (%.2f != %.2f)", sum, req.TotalAmount)
-	}
 
 	// Katılımcılar ekle
 	stmt, txErr := tx.PrepareContext(ctx, `
