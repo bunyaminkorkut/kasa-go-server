@@ -640,13 +640,14 @@ type User struct {
 	Email    string `json:"email"`
 	FullName string `json:"fullName"`
 	IBAN     string `json:"iban"`
+	Deleted  bool   `json:"deleted"`
 }
 
 // Kullanıcıyı ID ile al
 func (repo *KasaRepository) GetUserByID(userID string) (*User, error) {
 	var user User
-	err := repo.DB.QueryRow("SELECT id, email, fullname, iban FROM users WHERE id = ?", userID).
-		Scan(&user.ID, &user.Email, &user.FullName, &user.IBAN)
+	err := repo.DB.QueryRow("SELECT id, email, fullname, iban, deleted FROM users WHERE id = ?", userID).
+		Scan(&user.ID, &user.Email, &user.FullName, &user.IBAN, &user.Deleted)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, err

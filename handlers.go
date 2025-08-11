@@ -129,6 +129,21 @@ func LoginUserHandler(repo *KasaRepository) http.HandlerFunc {
 			return
 		}
 
+		userData, err := repo.GetUserByID(authResult.UID)
+		if err != nil {
+			log.Println("Kullanıcı bilgileri alınamadı:", err)
+			http.Error(w, "Kullanıcı bilgileri alınamadı", http.StatusInternalServerError)
+			return
+		}
+		if userData == nil {
+			http.Error(w, "Kullanıcı bulunamadı", http.StatusNotFound)
+			return
+		}
+		if userData.Deleted {
+			http.Error(w, "Kullanıcı silinmiş", http.StatusUnauthorized)
+			return
+		}
+
 		// JWT token oluştur
 		jwtToken, err := generateJWT(map[string]string{
 			"uid":       authResult.UID,
@@ -868,6 +883,10 @@ func LoginWGoogleHandler(repo *KasaRepository) http.HandlerFunc {
 		user, err := repo.GetUserByID(req.UserID)
 		if err != nil && err != sql.ErrNoRows {
 			http.Error(w, "Veritabanı hatası", http.StatusInternalServerError)
+			return
+		}
+		if user.Deleted {
+			http.Error(w, "Kullanıcı silinmiş", http.StatusUnauthorized)
 			return
 		}
 
