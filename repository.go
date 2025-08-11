@@ -900,3 +900,25 @@ func (repo *KasaRepository) deleteGroupExpense(
 		Credits: credits,
 	}, nil
 }
+
+func (repo *KasaRepository) deleteAccount(ctx context.Context, userID string) (bool, error) {
+	tx, err := repo.DB.Begin()
+	if err != nil {
+		log.Println("Transaction başlatılamadı:", err)
+		return false, err
+	}
+	defer tx.Rollback()
+
+	// Kullanıcı bilgilerini sil
+	_, err = tx.ExecContext(ctx, `
+		UPDATE users
+		SET deleted = 1
+		WHERE id = ?
+	`, userID)
+	if err != nil {
+		log.Println("Kullanıcı silinemedi:", err)
+		return false, err
+	}
+	// Kullanıcının gruplardaki üyeliklerini sil
+	return true, nil
+}

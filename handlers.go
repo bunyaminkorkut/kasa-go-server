@@ -1306,3 +1306,32 @@ func handleDeleteExpense(repo *KasaRepository) http.HandlerFunc {
 		_ = json.NewEncoder(w).Encode(expenseRes)
 	}
 }
+
+func handleDeleteAccount(repo *KasaRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			http.Error(w, "Yalnızca DELETE metodu desteklenir", http.StatusMethodNotAllowed)
+			return
+		}
+
+		userUID := r.Context().Value("userUID")
+		if userUID == nil {
+			http.Error(w, "Yetkisiz erişim", http.StatusUnauthorized)
+			return
+		}
+
+		_, err := repo.deleteAccount(r.Context(), userUID.(string))
+		if err != nil {
+			log.Println("Hesap silme hatası:", err)
+			http.Error(w, "Hesap silinemedi", http.StatusInternalServerError)
+			return
+		}
+		// Hesap başarıyla silindiğinde yanıt dönebilir veya boş bırakılabilir
+		w.WriteHeader(http.StatusNoContent) // 204 No Content
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"message": "Hesap başarıyla silindi",
+		})
+		log.Println("Hesap başarıyla silindi:", userUID)
+	}
+}
