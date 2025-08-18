@@ -55,11 +55,19 @@ func (repo *KasaRepository) getMyGroups(userID string) (*sql.Rows, error) {
 			u.email AS creator_email,
 
 			(
-				SELECT JSON_ARRAYAGG(JSON_OBJECT(
-					'id', gm_user.id,
-					'fullname', gm_user.fullname,
-					'email', gm_user.email
-				))
+				SELECT JSON_ARRAYAGG(
+					JSON_OBJECT(
+						'id', gm_user.id,
+						'fullname', gm_user.fullname,
+						'email', gm_user.email,
+						'total_share', COALESCE((
+							SELECT SUM(p.amount_share)
+							FROM group_expenses e
+							JOIN group_expense_participants p ON p.expense_id = e.expense_id
+							WHERE e.group_id = g.id AND p.user_id = gm_user.id
+						), 0)
+					)
+				)
 				FROM group_members gm
 				JOIN users gm_user ON gm.user_id = gm_user.id
 				WHERE gm.group_id = g.id
@@ -222,11 +230,19 @@ func (repo *KasaRepository) sendAddGroupRequest(groupID, addedMemberEmail, curre
 
 			-- üyeler
 			(
-				SELECT JSON_ARRAYAGG(JSON_OBJECT(
-					'id', gm_user.id,
-					'fullname', gm_user.fullname,
-					'email', gm_user.email
-				))
+				SELECT JSON_ARRAYAGG(
+					JSON_OBJECT(
+						'id', gm_user.id,
+						'fullname', gm_user.fullname,
+						'email', gm_user.email,
+						'total_share', COALESCE((
+							SELECT SUM(p.amount_share)
+							FROM group_expenses e
+							JOIN group_expense_participants p ON p.expense_id = e.expense_id
+							WHERE e.group_id = g.id AND p.user_id = gm_user.id
+						), 0)
+					)
+				)
 				FROM group_members gm
 				JOIN users gm_user ON gm.user_id = gm_user.id
 				WHERE gm.group_id = g.id
